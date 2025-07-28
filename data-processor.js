@@ -96,6 +96,37 @@ class DataProcessor {
             status: 'analyzed'
         };
 
+        // Process CNAME-detected service if available
+        if (subdomain.detectedService) {
+            console.log(`🔧 Processing CNAME-detected service: ${subdomain.detectedService.name} for ${subdomain.subdomain}`);
+            
+            // Convert detected service to service entry format
+            const serviceEntry = {
+                name: subdomain.detectedService.name,
+                description: subdomain.detectedService.description,
+                category: subdomain.detectedService.category,
+                confidence: 'high',
+                evidenceType: 'CNAME',
+                records: [
+                    {
+                        type: 'CNAME',
+                        subdomain: subdomain.subdomain,
+                        target: subdomain.cnameTarget,
+                        record: { data: subdomain.cnameTarget }
+                    }
+                ]
+            };
+            
+            // Add the service to our services collection
+            this.processServices([serviceEntry], subdomain.subdomain);
+            
+            // Link the primary service to the subdomain
+            subdomainData.primaryService = {
+                name: subdomain.detectedService.name,
+                category: subdomain.detectedService.category
+            };
+        }
+
         this.processedData.subdomains.set(subdomainKey, subdomainData);
 
         // Process services from this subdomain

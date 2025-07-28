@@ -290,13 +290,23 @@ class DNSAnalyzer {
                     }
                 }
                 
-                // Check for takeover if we have CNAME records
+                // Check for takeover and detect services from CNAME records
                 if (analysis.records.CNAME && analysis.records.CNAME.length > 0) {
                     const cnameTarget = analysis.records.CNAME[0].data.replace(/\.$/, '');
+                    analysis.cnameTarget = cnameTarget;
+                    
+                    // Detect takeover
                     const takeover = await this.detectTakeover(subdomain, cnameTarget);
                     if (takeover) {
                         analysis.takeover = takeover;
                         this.stats.takeoversDetected++;
+                    }
+                    
+                    // Detect third-party service
+                    const detectedService = this.identifyServiceFromCNAME(cnameTarget);
+                    if (detectedService) {
+                        analysis.detectedService = detectedService;
+                        console.log(`  🎯 Detected service: ${detectedService.name} (${detectedService.category}) for ${subdomain}`);
                     }
                 }
             }
@@ -378,17 +388,50 @@ class DNSAnalyzer {
         
         const target = firstCNAME.toLowerCase();
         
-        // Common service patterns - simplified list
+        // Comprehensive service patterns for CNAME detection
         const servicePatterns = [
+            // Identity & Authentication
             { pattern: 'okta.com', name: 'Okta', category: 'security', description: 'Identity and access management platform' },
             { pattern: 'auth0.com', name: 'Auth0', category: 'security', description: 'Identity and access management platform' },
+            
+            // Payment Services
+            { pattern: 'stripecdn.com', name: 'Stripe', category: 'payment', description: 'Payment processing platform' },
+            { pattern: 'stripe.com', name: 'Stripe', category: 'payment', description: 'Payment processing platform' },
+            { pattern: 'paypal.com', name: 'PayPal', category: 'payment', description: 'Payment processing platform' },
+            
+            // Productivity & Office Suites
+            { pattern: 'zohohost.eu', name: 'Zoho', category: 'productivity', description: 'Business productivity suite' },
+            { pattern: 'zoho.com', name: 'Zoho', category: 'productivity', description: 'Business productivity suite' },
+            { pattern: 'zohohost.com', name: 'Zoho', category: 'productivity', description: 'Business productivity suite' },
+            
+            // CDN & Cloud Services
             { pattern: 'cloudflare', name: 'Cloudflare', category: 'cloud', description: 'CDN and security services' },
+            { pattern: 'cloudfront.net', name: 'AWS CloudFront', category: 'cloud', description: 'Amazon content delivery network' },
+            { pattern: 'fastly.com', name: 'Fastly', category: 'cloud', description: 'Edge cloud platform' },
+            
+            // Hosting Platforms
             { pattern: 'heroku', name: 'Heroku', category: 'cloud', description: 'Cloud application platform' },
             { pattern: 'netlify', name: 'Netlify', category: 'cloud', description: 'Static site hosting' },
             { pattern: 'vercel', name: 'Vercel', category: 'cloud', description: 'Frontend deployment platform' },
             { pattern: 'github', name: 'GitHub Pages', category: 'cloud', description: 'Static site hosting' },
+            { pattern: 'wixdns.net', name: 'Wix', category: 'cloud', description: 'Website builder platform' },
+            { pattern: 'wix.com', name: 'Wix', category: 'cloud', description: 'Website builder platform' },
+            
+            // Documentation & Content
             { pattern: 'gitbook.io', name: 'GitBook', category: 'documentation', description: 'Documentation platform' },
-            { pattern: 'canny.io', name: 'Canny Feedback', category: 'feedback', description: 'Product feedback platform' }
+            { pattern: 'notion.so', name: 'Notion', category: 'documentation', description: 'Workspace and documentation platform' },
+            
+            // Customer Feedback & Support
+            { pattern: 'canny.io', name: 'Canny Feedback', category: 'feedback', description: 'Product feedback platform' },
+            { pattern: 'zendesk.com', name: 'Zendesk', category: 'support', description: 'Customer support platform' },
+            { pattern: 'intercom.io', name: 'Intercom', category: 'support', description: 'Customer messaging platform' },
+            
+            // Analytics & Marketing
+            { pattern: 'hubspot.com', name: 'HubSpot', category: 'marketing', description: 'Marketing and CRM platform' },
+            { pattern: 'mailchimp.com', name: 'Mailchimp', category: 'marketing', description: 'Email marketing platform' },
+            
+            // Development Tools
+            { pattern: 'gitpod.io', name: 'Gitpod', category: 'development', description: 'Cloud development environment' }
         ];
         
         for (const service of servicePatterns) {
@@ -981,11 +1024,24 @@ class DNSAnalyzer {
                         
                         // Regular CNAME (not to main domain)
                         console.log(`  🔗 Subdomain ${subdomain} has CNAME to ${cnameTarget}`);
-                        results.push({
+                        
+                        // Detect third-party service from CNAME target
+                        const detectedService = this.identifyServiceFromCNAME(cnameTarget);
+                        
+                        const subdomainResult = {
                             subdomain: subdomain,
                             records: records,
-                            ip: null // CNAME doesn't have direct IP
-                        });
+                            ip: null, // CNAME doesn't have direct IP
+                            cnameTarget: cnameTarget
+                        };
+                        
+                        // Add service information if detected
+                        if (detectedService) {
+                            subdomainResult.detectedService = detectedService;
+                            console.log(`  🎯 Detected service: ${detectedService.name} (${detectedService.category}) for ${subdomain}`);
+                        }
+                        
+                        results.push(subdomainResult);
                     } else if (aRecords.length > 0) {
                         // Check if the record data is an IP address
                         const recordData = aRecords[0].data;

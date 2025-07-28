@@ -40,6 +40,10 @@ cp analysis-controller.js docs/
 cp service-registry.js docs/
 cp subdomain-registry.js docs/
 
+# Create .nojekyll file for GitHub Pages
+echo "🔧 Creating .nojekyll file for GitHub Pages compatibility..."
+touch docs/.nojekyll
+
 # Verify all files were copied
 echo "✅ Verifying deployment files..."
 
@@ -55,6 +59,7 @@ required_files=(
     "analysis-controller.js"
     "service-registry.js"
     "subdomain-registry.js"
+    ".nojekyll"
 )
 
 missing_files=()
@@ -81,6 +86,7 @@ if [ ${#missing_files[@]} -eq 0 ]; then
     echo "      - ui-renderer.js (UI rendering)"
     echo "      - service-registry.js (service management)"
     echo "      - subdomain-registry.js (subdomain management)"
+    echo "      - .nojekyll (disable jekyll processing)"
     echo ""
     echo "🎉 Deployment ready! The docs/ folder contains all production files."
     echo "💡 You can now deploy the docs/ folder to GitHub Pages or any web server."
