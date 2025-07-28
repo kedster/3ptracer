@@ -1,18 +1,74 @@
 // Main Application Logic
 class App {
     constructor() {
+        this.results = {
+            services: new ServiceRegistry(),
+            subdomains: [],
+            security: {
+                takeovers: [],
+                dnsIssues: [],
+                emailIssues: [],
+                cloudIssues: []
+            },
+            interestingFindings: [],
+            stats: {
+                totalServices: 0,
+                totalSubdomains: 0,
+                totalProviders: 0,
+                totalTakeovers: 0,
+                totalHistoricalRecords: 0
+            }
+        };
+        
         this.dnsAnalyzer = new DNSAnalyzer();
         this.serviceDetector = new ServiceDetector();
-        this.currentDomain = '';
-        this.results = {};
+        this.subdomainRegistry = new SubdomainRegistry();
+        
+        // Initialize API notifications
         this.apiNotifications = [];
+        
+        // Debug utility
+        this.debug = {
+            isEnabled: false,
+            log: (message, data = null) => {
+                if (this.debug.isEnabled) {
+                    if (data) {
+                        console.log(`🔍 DEBUG: ${message}`, data);
+                    } else {
+                        console.log(`🔍 DEBUG: ${message}`);
+                    }
+                }
+            },
+            logJSON: (message, data) => {
+                if (this.debug.isEnabled) {
+                    console.log(`🔍 DEBUG: ${message}`);
+                    console.log(JSON.stringify(data, null, 2));
+                }
+            },
+            logStats: (stats) => {
+                if (this.debug.isEnabled) {
+                    console.log('📊 DEBUG: Final Statistics');
+                    console.log(JSON.stringify(stats, null, 2));
+                } else {
+                    console.log(`📊 Analysis Complete: ${stats.totalServices} services, ${stats.totalSubdomains} subdomains, ${stats.totalTakeovers} security issues`);
+                }
+            }
+        };
     }
 
     // Main analysis function
     async analyzeDomain(domain) {
+        // Check debug mode
+        const debugCheckbox = document.getElementById('debugMode');
+        this.debug.isEnabled = debugCheckbox ? debugCheckbox.checked : false;
+        
+        if (this.debug.isEnabled) {
+            console.log('🔍 DEBUG MODE ENABLED - Detailed output will be shown');
+        }
+        
         console.log(`🚀 Starting analysis for domain: ${domain}`);
         
-        // Reset statistics for new analysis
+        // Reset all internal state for new analysis
         this.dnsAnalyzer.resetStats();
         this.dnsAnalyzer.setCurrentDomain(domain);
         
@@ -23,12 +79,13 @@ class App {
             subdomains: new SubdomainRegistry(), // Phase 1: Replace array with registry
             historicalRecords: [],
             services: new ServiceRegistry(), // Phase 2: Replace arrays with registry
+            interestingFindings: [],
+            redirectsToMain: [], // Subdomains that redirect to main domain
             security: {
                 takeovers: [],
                 vulnerabilities: [],
                 dnsIssues: [],
                 emailIssues: [],
-                infrastructureIssues: [],
                 cloudIssues: []
             },
             stats: {
@@ -38,6 +95,15 @@ class App {
                 totalHistoricalRecords: 0
             }
         };
+        
+        // Clear all registries for new analysis
+        this.results.subdomains.clear();
+        this.results.services.clear();
+        
+        // Reset API notifications for new analysis
+        this.apiNotifications = [];
+        
+        console.log('🧹 All internal arrays and registries cleared for new analysis');
 
         // Set up real-time subdomain processing
         this.setupRealTimeProcessing();
@@ -58,6 +124,7 @@ class App {
             // Analyze main domain
             const mainDomainResults = await this.dnsAnalyzer.analyzeMainDomain(domain);
             this.results.mainDomain = mainDomainResults;
+            this.debug.logJSON('Main domain analysis complete. Records found:', mainDomainResults.records || {});
             console.log(`📋 Main domain analysis complete. Records found:`, Object.keys(mainDomainResults.records || {}));
             
             // Detect services from main domain
@@ -77,38 +144,56 @@ class App {
             }
             const services = this.serviceDetector.detectServices(mainDomainRecordsWithDomain);
             this.categorizeServices(services, domain);
+            this.debug.logJSON('Services detected from main domain:', services);
             console.log(`✅ Found ${services.length} services from main domain`);
             
             // Wait for certificate transparency results (they should be ready by now)
             this.updateProgress(50, 'Discovering subdomains...');
             console.log(`📊 Step 2: Discovering subdomains from certificate transparency...`);
             const subdomains = await ctPromise;
+            this.debug.logJSON('Certificate transparency subdomains found:', subdomains);
             console.log(`✅ Certificate transparency complete. Found ${subdomains.length} subdomains`);
             
             // Analyze subdomains
             this.updateProgress(70, 'Analyzing subdomains...');
             console.log(`📊 Step 3: Analyzing subdomains...`);
             const subdomainResults = await this.dnsAnalyzer.analyzeSubdomains(subdomains);
+            this.debug.logJSON('Subdomain analysis results:', subdomainResults);
             
             // Phase 1: Use new SubdomainRegistry for batch processing
+            const redirectsToMain = [];
+            
             for (const subdomain of subdomainResults) {
-                // Convert to new format
-                const subdomainData = {
-                    records: subdomain.records || {},
-                    ipAddresses: subdomain.ip ? [subdomain.ip] : [],
-                    cnameChain: subdomain.cnameChain || [],
-                    primaryService: subdomain.primaryService || null,
-                    infrastructure: subdomain.infrastructure || null,
-                    detectedServices: subdomain.detectedServices || [],
-                    vendor: subdomain.vendor || { vendor: 'Unknown', category: 'Unknown' },
-                    takeover: subdomain.takeover || null,
-                    vulnerabilities: subdomain.vulnerabilities || [],
-                    status: 'analyzed'
-                };
-                
-                // Add to registry (handles merging automatically)
-                this.results.subdomains.addSubdomain(subdomain.subdomain, 'batch-analysis', subdomainData);
+                // Check if this is a redirect to main domain
+                if (subdomain.isRedirectToMain) {
+                    redirectsToMain.push({
+                        subdomain: subdomain.subdomain,
+                        redirectTarget: subdomain.redirectTarget,
+                        source: 'batch-analysis'
+                    });
+                    console.log(`🔄 Redirect to main domain: ${subdomain.subdomain} → ${subdomain.redirectTarget}`);
+                } else {
+                    // Convert to new format
+                    const subdomainData = {
+                        records: subdomain.records || {},
+                        ipAddresses: subdomain.ip ? [subdomain.ip] : [],
+                        cnameChain: subdomain.cnameChain || [],
+                        primaryService: subdomain.primaryService || null,
+                        infrastructure: subdomain.infrastructure || null,
+                        detectedServices: subdomain.detectedServices || [],
+                        vendor: subdomain.vendor || { vendor: 'Unknown', category: 'Unknown' },
+                        takeover: subdomain.takeover || null,
+                        vulnerabilities: subdomain.vulnerabilities || [],
+                        status: 'analyzed'
+                    };
+                    
+                    // Add to registry (handles merging automatically)
+                    this.results.subdomains.addSubdomain(subdomain.subdomain, 'batch-analysis', subdomainData);
+                }
             }
+            
+            // Store redirects separately
+            this.results.redirectsToMain = redirectsToMain;
             
             console.log(`✅ Subdomain analysis complete: ${subdomainResults.length} subdomains processed`);
             
@@ -146,6 +231,7 @@ class App {
             if (mainDomainResults && mainDomainResults.records) {
                 const dnsIssues = this.serviceDetector.detectDNSSecurityIssues(mainDomainResults.records);
                 this.results.security.dnsIssues = dnsIssues;
+                this.debug.logJSON('DNS security issues found:', dnsIssues);
                 console.log(`🔒 Found ${dnsIssues.length} DNS security issues`);
             }
             
@@ -153,16 +239,18 @@ class App {
             if (mainDomainResults && mainDomainResults.records) {
                 const emailIssues = this.serviceDetector.detectEmailSecurityIssues(mainDomainResults.records);
                 this.results.security.emailIssues = emailIssues;
+                this.debug.logJSON('Email security issues found:', emailIssues);
                 console.log(`🔒 Found ${emailIssues.length} email security issues`);
             }
             
-            // Check for infrastructure security issues
-            const infrastructureIssues = this.serviceDetector.detectInfrastructureSecurityIssues(
+            // Check for interesting infrastructure findings
+            const infrastructureFindings = this.serviceDetector.detectInterestingInfrastructureFindings(
                 mainDomainResults?.records || {}, 
                 subdomainResults
             );
-            this.results.security.infrastructureIssues = infrastructureIssues;
-            console.log(`🔒 Found ${infrastructureIssues.length} infrastructure security issues`);
+            this.results.interestingFindings = infrastructureFindings;
+            this.debug.logJSON('Interesting infrastructure findings:', infrastructureFindings);
+            console.log(`🔍 Found ${infrastructureFindings.length} interesting infrastructure patterns`);
             
             // Check for cloud security issues
             const cloudIssues = this.serviceDetector.detectCloudSecurityIssues(
@@ -170,6 +258,7 @@ class App {
                 subdomainResults
             );
             this.results.security.cloudIssues = cloudIssues;
+            this.debug.logJSON('Cloud security issues found:', cloudIssues);
             console.log(`🔒 Found ${cloudIssues.length} cloud security issues`);
             
             // Detect services from subdomains
@@ -314,6 +403,9 @@ class App {
             
             // Print final statistics
             this.dnsAnalyzer.printStats();
+            
+            // Debug: Log final results structure
+            this.debug.logJSON('Final analysis results:', this.results);
             
             // Phase 2: Print complete JSON structure
             console.log('🎯 COMPLETE DATA STRUCTURE JSON:');
@@ -712,13 +804,31 @@ class App {
             !subdomain.ip && !subdomain.primaryService && !subdomain.cnameService && !subdomain.isCategorized
         );
         
-        // Create a map of CT log subdomains (deduplicate within CT logs)
-        const ctSubdomains = new Set();
+        // Create a map to track unique CT log entries by subdomain
+        const ctSubdomainsMap = new Map();
         const uniqueCTRecords = [];
+        
         for (const record of historicalRecords) {
-            if (!ctSubdomains.has(record.subdomain)) {
-                ctSubdomains.add(record.subdomain);
+            const key = record.subdomain;
+            
+            if (!ctSubdomainsMap.has(key)) {
+                // First occurrence of this subdomain
+                ctSubdomainsMap.set(key, record);
                 uniqueCTRecords.push(record);
+            } else {
+                // Duplicate found - keep the one with more information
+                const existingRecord = ctSubdomainsMap.get(key);
+                const existingInfo = this.getRecordInfoScore(existingRecord);
+                const newInfo = this.getRecordInfoScore(record);
+                
+                if (newInfo > existingInfo) {
+                    // Replace with the record that has more information
+                    const index = uniqueCTRecords.findIndex(r => r.subdomain === key);
+                    if (index !== -1) {
+                        uniqueCTRecords[index] = record;
+                        ctSubdomainsMap.set(key, record);
+                    }
+                }
             }
         }
         
@@ -727,7 +837,7 @@ class App {
         
         // Mark DNS analysis subdomains that also appear in CT logs
         for (const subdomain of dnsHistoricalSubdomains) {
-            if (ctSubdomains.has(subdomain.subdomain)) {
+            if (ctSubdomainsMap.has(subdomain.subdomain)) {
                 // This subdomain appears in both CT logs and DNS analysis
                 // Mark it to only appear in CT logs (higher priority)
                 subdomain.dedupSection = 'historical';
@@ -735,7 +845,24 @@ class App {
             }
         }
         
-        console.log(`✅ Historical records deduplication: ${ctSubdomains.size} unique CT log entries, ${dnsHistoricalSubdomains.length} DNS analysis entries`);
+        console.log(`✅ Historical records deduplication: ${ctSubdomainsMap.size} unique CT log entries, ${dnsHistoricalSubdomains.length} DNS analysis entries`);
+    }
+    
+    // Helper method to score record information completeness
+    getRecordInfoScore(record) {
+        let score = 0;
+        
+        // Prefer records with more complete information
+        if (record.issuer && record.issuer !== 'Unknown') score += 2;
+        if (record.expiry && record.expiry !== 'Unknown') score += 2;
+        if (record.source && record.source !== 'Unknown') score += 1;
+        if (record.discovered) score += 1;
+        
+        // Prefer certain sources over others
+        if (record.source === 'crt.sh') score += 1;
+        if (record.source === 'Cert Spotter') score += 1;
+        
+        return score;
     }
     
     // Phase 2: AWS service handling is now done by ServiceRegistry
@@ -797,7 +924,6 @@ class App {
             this.results.security.takeovers.length +
             this.results.security.dnsIssues.length +
             this.results.security.emailIssues.length +
-            this.results.security.infrastructureIssues.length +
             this.results.security.cloudIssues.length;
         
         this.results.stats.totalTakeovers = totalSecurityIssues;
@@ -812,6 +938,9 @@ class App {
         const consolidatedProviders = this.consolidateSubdomainsByProvider();
         this.results.stats.totalProviders = consolidatedProviders.length;
         this.results.stats.consolidatedProviders = consolidatedProviders;
+        
+        // Log final statistics
+        this.debug.logStats(this.results.stats);
     }
 
     // Update progress bar
@@ -834,6 +963,8 @@ class App {
         this.displayAPINotifications();
         this.displayServicesByVendor();
         this.displaySecurity();
+        this.displayInterestingFindings();
+        this.displayRedirectsToMain();
         this.displayCNAMEMappings();
         this.displaySubdomains(); // Moved to end to avoid duplicates
         this.displayHistoricalRecords();
@@ -1160,7 +1291,6 @@ class App {
             ...this.results.security.takeovers.map(issue => ({ ...issue, category: 'takeover' })),
             ...this.results.security.dnsIssues.map(issue => ({ ...issue, category: 'dns' })),
             ...this.results.security.emailIssues.map(issue => ({ ...issue, category: 'email' })),
-            ...this.results.security.infrastructureIssues.map(issue => ({ ...issue, category: 'infrastructure' })),
             ...this.results.security.cloudIssues.map(issue => ({ ...issue, category: 'cloud' }))
         ];
         
@@ -1212,6 +1342,115 @@ class App {
         }
         
         container.innerHTML = html;
+    }
+    
+    // Display interesting findings
+    displayInterestingFindings() {
+        const container = document.getElementById('interestingFindings');
+        const section = container.closest('.service-category');
+        
+        if (!this.results.interestingFindings || this.results.interestingFindings.length === 0) {
+            // Hide the section if no interesting findings
+            if (section) {
+                section.style.display = 'none';
+            }
+            return;
+        }
+        
+        // Show the section and populate with interesting findings
+        if (section) {
+            section.style.display = 'block';
+        }
+        
+        // Group findings by type
+        const patternFindings = this.results.interestingFindings.filter(f => f.type === 'interesting_subdomain');
+        const serviceFindings = this.results.interestingFindings.filter(f => f.type === 'service_subdomain');
+        
+        let html = `<div class="risk-section"><h4>🔍 Interesting Infrastructure Findings (${this.results.interestingFindings.length})</h4>`;
+        html += '<p style="color: #666; font-size: 0.9rem; margin-bottom: 15px;"><em>⚠️ Note: These findings are based on pattern matching only. No actual content verification is performed.</em></p>';
+        
+        // Display service-related findings
+        if (serviceFindings.length > 0) {
+            html += `<div style="margin-bottom: 20px;"><h5 style="color: #17a2b8; margin-bottom: 10px;">🔧 Service-Related Subdomains (${serviceFindings.length})</h5>`;
+            for (const finding of serviceFindings) {
+                html += this.formatInterestingFinding(finding);
+            }
+            html += '</div>';
+        }
+        
+        // Display pattern-based findings
+        if (patternFindings.length > 0) {
+            html += `<div style="margin-bottom: 20px;"><h5 style="color: #17a2b8; margin-bottom: 10px;">🔍 Interesting Patterns (${patternFindings.length})</h5>`;
+            for (const finding of patternFindings) {
+                html += this.formatInterestingFinding(finding);
+            }
+            html += '</div>';
+        }
+        
+        html += '</div>';
+        
+        container.innerHTML = html;
+    }
+    
+    // Display redirects to main domain
+    displayRedirectsToMain() {
+        const container = document.getElementById('redirectsToMain');
+        if (!container) return;
+        
+        if (!this.results.redirectsToMain || this.results.redirectsToMain.length === 0) {
+            container.style.display = 'none';
+            return;
+        }
+        
+        let html = `<div class="risk-section"><h4>🔄 Subdomain Redirects to Main Domain (${this.results.redirectsToMain.length})</h4>`;
+        html += '<p style="color: #666; font-size: 0.9rem; margin-bottom: 15px;"><em>ℹ️ These subdomains redirect to the main domain and serve the same content.</em></p>';
+        
+        for (const redirect of this.results.redirectsToMain) {
+            html += `
+                <div class="service-item" style="border-left: 4px solid #28a745;">
+                    <div class="service-name">🔄 ${redirect.subdomain}</div>
+                    <div class="service-description">
+                        <strong>Redirects to:</strong> ${this.createSubdomainLink(redirect.redirectTarget)}<br>
+                        <strong>Source:</strong> ${redirect.source}<br>
+                        <em>Note: This subdomain serves the same content as the main domain</em>
+                    </div>
+                </div>
+            `;
+        }
+        
+        html += '</div>';
+        
+        container.innerHTML = html;
+        container.style.display = 'block';
+    }
+    
+    // Format individual interesting finding
+    formatInterestingFinding(finding) {
+        let html = `
+            <div class="service-item" style="border-left: 4px solid #17a2b8;">
+                <div class="service-name">🔍 ${finding.description}</div>
+                <div class="service-description">
+        `;
+        
+        if (finding.type === 'interesting_subdomain') {
+            html += `
+                    <strong>Pattern:</strong> ${finding.pattern}<br>
+                    <strong>Subdomain:</strong> ${this.createSubdomainLink(finding.subdomain)}<br>
+            `;
+        } else if (finding.type === 'service_subdomain') {
+            html += `
+                    <strong>Service:</strong> ${finding.service.toUpperCase()}<br>
+                    <strong>Subdomain:</strong> ${this.createSubdomainLink(finding.subdomain)}<br>
+                    <strong>IP:</strong> ${finding.ip}<br>
+            `;
+        }
+        
+        html += `${finding.recommendation ? `<strong>Note:</strong> ${finding.recommendation}<br>` : ''}
+                </div>
+            </div>
+        `;
+        
+        return html;
     }
     
     // Format individual security issue

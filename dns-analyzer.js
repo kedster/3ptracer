@@ -41,8 +41,9 @@ class DNSAnalyzer {
         };
     }
 
-    // Reset statistics for new analysis
+    // Reset all internal state for new analysis
     resetStats() {
+        // Reset statistics
         this.stats = {
             dnsQueries: 0,
             apiCalls: 0,
@@ -54,6 +55,17 @@ class DNSAnalyzer {
             startTime: Date.now(),
             endTime: null
         };
+        
+        // Clear all internal arrays and sets
+        this.globalSubdomains.clear();
+        this.processedSubdomains.clear();
+        this.subdomainCallbacks = [];
+        this.notificationCallback = null;
+        this.historicalRecords = [];
+        this.ctCache.clear();
+        this.currentDomain = '';
+        
+        console.log('🧹 DNS Analyzer internal state cleared for new analysis');
     }
     
     // Set current domain for intelligent record querying
@@ -123,6 +135,18 @@ class DNSAnalyzer {
         return this.historicalRecords;
     }
 
+    // Check if CNAME points to main domain
+    isCNAMEToMainDomain(cnameTarget) {
+        if (!cnameTarget || !this.currentDomain) return false;
+        
+        // Remove trailing dot and compare
+        const cleanTarget = cnameTarget.replace(/\.$/, '');
+        const cleanMainDomain = this.currentDomain.replace(/\.$/, '');
+        
+        // Check if CNAME target is the main domain
+        return cleanTarget === cleanMainDomain;
+    }
+
     // Process subdomain immediately when discovered
     async processSubdomainImmediately(subdomain, source, certInfo = null) {
         if (this.processedSubdomains.has(subdomain)) {
@@ -137,6 +161,27 @@ class DNSAnalyzer {
         try {
             // Analyze the subdomain
             const analysis = await this.analyzeSingleSubdomain(subdomain);
+            
+            // Check if this is a CNAME redirect to main domain
+            if (analysis.records.CNAME && analysis.records.CNAME.length > 0) {
+                const cnameTarget = analysis.records.CNAME[0].data;
+                if (this.isCNAMEToMainDomain(cnameTarget)) {
+                    // This is a redirect to main domain - mark as redirect and skip further analysis
+                    analysis.isRedirectToMain = true;
+                    analysis.redirectTarget = cnameTarget;
+                    console.log(`🔄 Redirect detected: ${subdomain} → ${cnameTarget} (main domain) - skipping detailed analysis`);
+                    
+                    // Notify about redirect completion
+                    this.subdomainCallbacks.forEach(callback => {
+                        try {
+                            callback(subdomain, source, analysis);
+                        } catch (error) {
+                            console.warn('Redirect callback error:', error);
+                        }
+                    });
+                    return; // Skip further analysis
+                }
+            }
             
             // Check if this is a historical record (no DNS records found)
             if ((!analysis.records.A || analysis.records.A.length === 0) && 
@@ -1149,33 +1194,79 @@ class DNSAnalyzer {
         for (const subdomain of subdomains) {
             try {
                 console.log(`  📡 Querying DNS for subdomain: ${subdomain}`);
-                const records = await this.queryDNS(subdomain, 'A');
+                // Query for both A and CNAME records to detect redirects
+                const records = await this.queryDNS(subdomain);
                 if (records && records.length > 0) {
-                    // Check if the record data is an IP address
-                    const recordData = records[0].data;
-                    const isIP = /^(?:[0-9]{1,3}\.){3}[0-9]{1,3}$/.test(recordData);
+                    // Check for CNAME records first
+                    const cnameRecords = records.filter(r => r.type === 5); // CNAME type
+                    const aRecords = records.filter(r => r.type === 1); // A type
                     
-                    if (isIP) {
+                    if (cnameRecords.length > 0) {
+                        const cnameTarget = cnameRecords[0].data;
+                        
+                        // Check if this is a redirect to main domain
+                        if (this.isCNAMEToMainDomain(cnameTarget)) {
+                            console.log(`  🔄 Redirect detected: ${subdomain} → ${cnameTarget} (main domain)`);
+                            results.push({
+                                subdomain: subdomain,
+                                records: records,
+                                isRedirectToMain: true,
+                                redirectTarget: cnameTarget,
+                                ip: null
+                            });
+                            continue; // Skip further analysis for redirects
+                        }
+                        
+                        // Regular CNAME (not to main domain)
+                        console.log(`  🔗 Subdomain ${subdomain} has CNAME to ${cnameTarget}`);
                         results.push({
                             subdomain: subdomain,
                             records: records,
-                            ip: recordData
+                            ip: null // CNAME doesn't have direct IP
                         });
-                        console.log(`  ✅ Subdomain ${subdomain} resolved to IP ${recordData}`);
+                    } else if (aRecords.length > 0) {
+                        // Check if the record data is an IP address
+                        const recordData = aRecords[0].data;
+                        const isIP = /^(?:[0-9]{1,3}\.){3}[0-9]{1,3}$/.test(recordData);
+                        
+                        if (isIP) {
+                            results.push({
+                                subdomain: subdomain,
+                                records: records,
+                                ip: recordData
+                            });
+                            console.log(`  ✅ Subdomain ${subdomain} resolved to IP ${recordData}`);
+                        } else {
+                            console.log(`  ⚠️  Subdomain ${subdomain} resolved to domain ${recordData} (not an IP)`);
+                            results.push({
+                                subdomain: subdomain,
+                                records: records,
+                                ip: null
+                            });
+                        }
                     } else {
-                        // If it's not an IP, it might be a CNAME or other record type
-                        console.log(`  ⚠️  Subdomain ${subdomain} resolved to domain ${recordData} (not an IP)`);
+                        console.log(`  ⚠️  Subdomain ${subdomain} has no A or CNAME records`);
                         results.push({
                             subdomain: subdomain,
                             records: records,
-                            ip: null // No IP for ASN lookup
+                            ip: null
                         });
                     }
                 } else {
-                    console.log(`  ⚠️  Subdomain ${subdomain} has no A records`);
+                    console.log(`  ⚠️  Subdomain ${subdomain} has no DNS records`);
+                    results.push({
+                        subdomain: subdomain,
+                        records: [],
+                        ip: null
+                    });
                 }
             } catch (error) {
                 console.warn(`  ❌ Failed to analyze subdomain ${subdomain}:`, error.message);
+                results.push({
+                    subdomain: subdomain,
+                    records: [],
+                    ip: null
+                });
             }
         }
 
@@ -1183,30 +1274,78 @@ class DNSAnalyzer {
         return results;
     }
 
-    // Get ASN information for IP
+    // Get ASN information for IP with multiple fallback sources
     async getASNInfo(ip) {
-        try {
-            const response = await fetch(`https://ipinfo.io/${ip}/json`);
-            if (!response.ok) {
-                throw new Error(`ASN query failed: ${response.status}`);
+        const providers = [
+            {
+                name: 'ipinfo.io',
+                url: `https://ipinfo.io/${ip}/json`,
+                transform: (data) => ({
+                    asn: data.org || 'Unknown',
+                    isp: data.org || 'Unknown',
+                    location: data.country || 'Unknown',
+                    city: data.city || 'Unknown'
+                })
+            },
+            {
+                name: 'ip-api.com',
+                url: `http://ip-api.com/json/${ip}`,
+                transform: (data) => ({
+                    asn: data.as || 'Unknown',
+                    isp: data.isp || 'Unknown',
+                    location: data.countryCode || 'Unknown',
+                    city: data.city || 'Unknown'
+                })
+            },
+            {
+                name: 'ipapi.co',
+                url: `https://ipapi.co/${ip}/json/`,
+                transform: (data) => ({
+                    asn: data.asn || 'Unknown',
+                    isp: data.org || 'Unknown',
+                    location: data.country_code || 'Unknown',
+                    city: data.city || 'Unknown'
+                })
             }
+        ];
 
-            const data = await response.json();
-            return {
-                asn: data.org || 'Unknown',
-                isp: data.org || 'Unknown',
-                location: data.country || 'Unknown',
-                city: data.city || 'Unknown'
-            };
-        } catch (error) {
-            console.warn(`Failed to get ASN info for ${ip}:`, error);
-            return {
-                asn: 'Unknown',
-                isp: 'Unknown',
-                location: 'Unknown',
-                city: 'Unknown'
-            };
+        for (const provider of providers) {
+            try {
+                const response = await fetch(provider.url, {
+                    method: 'GET',
+                    headers: {
+                        'Accept': 'application/json',
+                        'User-Agent': '3rdPartyTracer/1.0'
+                    }
+                });
+
+                if (!response.ok) {
+                    console.warn(`Provider ${provider.name} failed for ${ip}: ${response.status}`);
+                    continue;
+                }
+
+                const data = await response.json();
+                
+                // Check if we got valid data
+                if (data && (data.asn || data.org || data.as)) {
+                    const result = provider.transform(data);
+                    console.log(`✅ ASN info for ${ip} from ${provider.name}:`, result);
+                    return result;
+                }
+            } catch (error) {
+                console.warn(`Provider ${provider.name} error for ${ip}:`, error.message);
+                continue;
+            }
         }
+
+        // All providers failed
+        console.warn(`❌ All ASN providers failed for ${ip}`);
+        return {
+            asn: 'Unknown',
+            isp: 'Unknown',
+            location: 'Unknown',
+            city: 'Unknown'
+        };
     }
 
     // Detect subdomain takeover

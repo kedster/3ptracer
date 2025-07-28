@@ -932,28 +932,29 @@ class ServiceDetector {
     }
     
     // Detect infrastructure security issues
-    detectInfrastructureSecurityIssues(records, subdomains) {
-        const issues = [];
+    detectInterestingInfrastructureFindings(records, subdomains) {
+        const findings = [];
         
-        // Check for exposed services
-        const exposedServices = [
+        // Check for service-related subdomains
+        const servicePatterns = [
             'ftp', 'telnet', 'ssh', 'smtp', 'pop3', 'imap', 'rdp', 'vnc'
         ];
         
         for (const subdomain of subdomains) {
             if (subdomain.ip) {
                 // Check for common service ports in subdomain names
-                for (const service of exposedServices) {
+                for (const service of servicePatterns) {
                     // Use word boundary regex to avoid false positives
                     // This matches the service name as a whole word, not as a substring
                     const serviceRegex = new RegExp(`\\b${service}\\b`, 'i');
                     if (serviceRegex.test(subdomain.subdomain)) {
-                        issues.push({
-                            type: 'exposed_service',
-                            risk: 'medium',
-                            description: `Potential exposed ${service.toUpperCase()} service`,
-                            recommendation: `Verify ${service.toUpperCase()} service security`,
+                        findings.push({
+                            type: 'service_subdomain',
+                            risk: 'info',
+                            description: `Service-related subdomain: ${service.toUpperCase()}`,
+                            recommendation: `Explore this subdomain for ${service.toUpperCase()} service insights`,
                             subdomain: subdomain.subdomain,
+                            service: service,
                             ip: subdomain.ip
                         });
                     }
@@ -961,20 +962,20 @@ class ServiceDetector {
             }
         }
         
-        // Check for suspicious subdomain patterns
-        const suspiciousPatterns = [
+        // Check for interesting subdomain patterns
+        const interestingPatterns = [
             'admin', 'login', 'test', 'dev', 'staging', 'backup', 'db', 'database',
             'api', 'internal', 'private', 'secret', 'password', 'root'
         ];
         
         for (const subdomain of subdomains) {
-            for (const pattern of suspiciousPatterns) {
+            for (const pattern of interestingPatterns) {
                 if (subdomain.subdomain.includes(pattern)) {
-                    issues.push({
-                        type: 'suspicious_subdomain',
-                        risk: 'low',
-                        description: `Suspicious subdomain pattern: ${pattern}`,
-                        recommendation: 'Review subdomain naming conventions',
+                    findings.push({
+                        type: 'interesting_subdomain',
+                        risk: 'info',
+                        description: `Interesting subdomain pattern: ${pattern}`,
+                        recommendation: 'Explore this subdomain for potential insights (pattern-based detection only)',
                         subdomain: subdomain.subdomain,
                         pattern: pattern
                     });
@@ -982,7 +983,7 @@ class ServiceDetector {
             }
         }
         
-        return issues;
+        return findings;
     }
     
     // Detect cloud security issues
