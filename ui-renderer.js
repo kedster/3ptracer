@@ -817,7 +817,9 @@ class UIRenderer {
             
             let issuer = 'Unknown';
             if (certInfo.issuer && certInfo.issuer !== 'No certificate found') {
-                if (certInfo.issuer.includes('Let\'s Encrypt')) issuer = 'Let\'s Encrypt';
+                if (certInfo.issuer === 'No certificate info available') {
+                    issuer = 'DNS Source';
+                } else if (certInfo.issuer.includes('Let\'s Encrypt')) issuer = 'Let\'s Encrypt';
                 else if (certInfo.issuer.includes('DigiCert')) issuer = 'DigiCert';
                 else if (certInfo.issuer.includes('Comodo')) issuer = 'Comodo';
                 else if (certInfo.issuer.includes('GoDaddy')) issuer = 'GoDaddy';

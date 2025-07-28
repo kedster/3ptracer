@@ -184,11 +184,12 @@ input[type="text"]:focus {
 }
 
 .service-records strong {
-    margin-top: 5px;
-    margin-bottom: 5px;
+    margin-top: 10px;
+    margin-bottom: 10px;
     font-weight: bold;
     color: #2c3e50;
     display: inline-block;
+    font-size: medium;
 }
 
 .risk-section h4 {
@@ -324,7 +325,8 @@ input[type="text"]:focus {
     margin-bottom: 8px;
     box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
     transition: opacity 0.3s, visibility 0.3s;
-    max-width: 300px;
+    max-width: 500px;
+    min-width: 250px;
     white-space: normal;
 }
 

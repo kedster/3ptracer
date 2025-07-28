@@ -356,8 +356,12 @@ class ServiceDetectionEngine {
 
     // Process DMARC records with special parsing
     processDMARCRecords(dmarcRecords, detectedServices, domainBeingAnalyzed) {
+        console.log(`🔍 Processing ${dmarcRecords.length} DMARC records for domain: ${domainBeingAnalyzed}`);
+        
         for (const record of dmarcRecords) {
             const dmarcData = record.data.toLowerCase();
+            console.log(`📧 Checking DMARC record: ${dmarcData}`);
+            
             if (dmarcData.includes('v=dmarc1')) {
                 const dmarcInfo = this.parseDMARC(dmarcData);
                 if (dmarcInfo) {
@@ -417,6 +421,9 @@ class ServiceDetectionEngine {
 
     // Detect third-party DMARC reporting services
     detectDMARCReportingServices(dmarcData, detectedServices, domainBeingAnalyzed, record) {
+        console.log(`🔍 Processing DMARC record for domain: ${domainBeingAnalyzed}`);
+        console.log(`📧 DMARC data: ${dmarcData}`);
+        
         // Extract RUA (aggregate reports) and RUF (forensic reports) emails
         const reportingEmails = [];
         
@@ -436,13 +443,19 @@ class ServiceDetectionEngine {
             });
         }
         
+        console.log(`📬 Extracted ${reportingEmails.length} reporting emails:`, reportingEmails);
+        
         // Check each reporting email to see if it's external
         reportingEmails.forEach(({ email, type }) => {
             const emailDomain = email.split('@')[1];
+            console.log(`🔍 Checking email: ${email}, domain: ${emailDomain}, analyzing: ${domainBeingAnalyzed}`);
+            
             if (emailDomain && emailDomain !== domainBeingAnalyzed) {
                 // This is a third-party DMARC reporting service
                 const serviceName = this.identifyDMARCReportingService(emailDomain);
                 const serviceDescription = `DMARC ${type} reporting service`;
+                
+                console.log(`✅ Found third-party DMARC service: ${serviceName} (${email})`);
                 
                 this.addOrUpdateService(
                     detectedServices, 
@@ -457,6 +470,8 @@ class ServiceDetectionEngine {
                     record, 
                     'DMARC'
                 );
+            } else {
+                console.log(`ℹ️ Skipping internal email: ${email} (same domain as ${domainBeingAnalyzed})`);
             }
         });
     }
