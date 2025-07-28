@@ -30,7 +30,7 @@ class SubdomainRegistry {
         return this.subdomains.get(subdomain);
     }
     
-    // Get all subdomains (for backward compatibility)
+    // Get all subdomains
     getAllSubdomains() {
         return Array.from(this.subdomains.values());
     }
@@ -47,38 +47,10 @@ class SubdomainRegistry {
         );
     }
     
-    // Find subdomain by name (for backward compatibility)
+    // Find subdomain index by predicate
     findIndex(predicate) {
         const subdomains = this.getAllSubdomains();
         return subdomains.findIndex(predicate);
-    }
-    
-    // Push subdomain (for backward compatibility)
-    push(subdomainData) {
-        // Extract subdomain name and source from the data
-        const subdomain = subdomainData.subdomain;
-        const source = subdomainData.source || 'unknown';
-        
-        // Convert old format to new format
-        const data = {
-            records: subdomainData.records || {},
-            ipAddresses: subdomainData.ip ? [subdomainData.ip] : [],
-            cnameChain: subdomainData.cnameChain || [],
-            primaryService: subdomainData.primaryService || null,
-            infrastructure: subdomainData.infrastructure || null,
-            detectedServices: subdomainData.detectedServices || [],
-            vendor: subdomainData.vendor || { vendor: 'Unknown', category: 'Unknown' },
-            takeover: subdomainData.takeover || null,
-            vulnerabilities: subdomainData.vulnerabilities || [],
-            status: subdomainData.status || 'analyzed'
-        };
-        
-        this.addSubdomain(subdomain, source, data);
-    }
-    
-    // Filter subdomains (for backward compatibility)
-    filter(predicate) {
-        return this.getAllSubdomains().filter(predicate);
     }
     
     // Register callback for events
@@ -130,12 +102,7 @@ class SubdomainRegistry {
             // Processing Information
             processingAttempts: 0,
             lastProcessingAttempt: null,
-            processingErrors: [],
-            
-            // Backward compatibility fields
-            ip: data?.ipAddresses?.[0] || null,
-            cnameTarget: data?.cnameChain?.[0]?.to || null,
-            cnameService: data?.primaryService || null
+            processingErrors: []
         };
     }
     
@@ -195,19 +162,7 @@ class SubdomainRegistry {
         if (newData?.status) {
             existing.status = newData.status;
         }
-        
-        // Update backward compatibility fields
-        if (newData?.ipAddresses?.[0]) {
-            existing.ip = newData.ipAddresses[0];
-        }
-        
-        if (newData?.cnameChain?.[0]?.to) {
-            existing.cnameTarget = newData.cnameChain[0].to;
-        }
-        
-        if (newData?.primaryService) {
-            existing.cnameService = newData.primaryService;
-        }
+
     }
     
     // Get statistics

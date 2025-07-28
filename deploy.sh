@@ -33,7 +33,10 @@ cp style.css docs/
 # JavaScript files
 cp app.js docs/
 cp dns-analyzer.js docs/
-cp service-patterns.js docs/
+cp service-detection-engine.js docs/
+cp data-processor.js docs/
+cp ui-renderer.js docs/
+cp analysis-controller.js docs/
 cp service-registry.js docs/
 cp subdomain-registry.js docs/
 
@@ -46,7 +49,10 @@ required_files=(
     "style.css"
     "app.js"
     "dns-analyzer.js"
-    "service-patterns.js"
+    "service-detection-engine.js"
+    "data-processor.js"
+    "ui-renderer.js"
+    "analysis-controller.js"
     "service-registry.js"
     "subdomain-registry.js"
 )
@@ -67,9 +73,12 @@ if [ ${#missing_files[@]} -eq 0 ]; then
     echo "   📄 HTML: index.html, about.html"
     echo "   🎨 CSS: style.css"
     echo "   ⚙️  JavaScript files:"
-    echo "      - app.js (main application)"
+    echo "      - app.js (main application wrapper)"
+    echo "      - analysis-controller.js (orchestrates analysis)"
     echo "      - dns-analyzer.js (DNS analysis)"
-    echo "      - service-patterns.js (service detection)"
+    echo "      - service-detection-engine.js (service detection)"
+    echo "      - data-processor.js (data processing)"
+    echo "      - ui-renderer.js (UI rendering)"
     echo "      - service-registry.js (service management)"
     echo "      - subdomain-registry.js (subdomain management)"
     echo ""
