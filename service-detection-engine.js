@@ -194,7 +194,7 @@ class ServiceDetectionEngine {
     }
 
     // Main service detection method - replaces all scattered detection methods
-    detectServices(records) {
+    detectServices(records, domainBeingAnalyzed = null) {
         const detectedServices = new Map();
 
         if (!records || typeof records !== 'object') {
@@ -214,6 +214,11 @@ class ServiceDetectionEngine {
                 return !data.includes('v=dmarc1') && !data.includes('v=spf1');
             });
             this.processRecordType(filteredTXT, 'txtPatterns', 'TXT', detectedServices);
+        }
+
+        // Process DMARC records to detect third-party reporting services
+        if (records.DMARC && domainBeingAnalyzed) {
+            this.processDMARCRecords(records.DMARC, detectedServices, domainBeingAnalyzed);
         }
 
         // Note: DMARC and SPF policy records are now handled separately as DNS records
@@ -350,14 +355,18 @@ class ServiceDetectionEngine {
     }
 
     // Process DMARC records with special parsing
-    processDMARCRecords(dmarcRecords, detectedServices) {
+    processDMARCRecords(dmarcRecords, detectedServices, domainBeingAnalyzed) {
         for (const record of dmarcRecords) {
             const dmarcData = record.data.toLowerCase();
             if (dmarcData.includes('v=dmarc1')) {
                 const dmarcInfo = this.parseDMARC(dmarcData);
                 if (dmarcInfo) {
-                    this.addOrUpdateService(detectedServices, 'DMARC', dmarcInfo, 'security', record, 'DMARC');
+                    // Don't add DMARC as a service anymore - it goes to DNS records
+                    // this.addOrUpdateService(detectedServices, 'DMARC', dmarcInfo, 'security', record, 'DMARC');
                 }
+                
+                // Extract and detect third-party DMARC reporting services
+                this.detectDMARCReportingServices(dmarcData, detectedServices, domainBeingAnalyzed, record);
             }
         }
     }
@@ -404,6 +413,90 @@ class ServiceDetectionEngine {
         if (pctMatch) reporting.push(`${pctMatch[1]}% of emails`);
         
         return reporting.length > 0 ? reporting.join(', ') : 'No reporting configured';
+    }
+
+    // Detect third-party DMARC reporting services
+    detectDMARCReportingServices(dmarcData, detectedServices, domainBeingAnalyzed, record) {
+        // Extract RUA (aggregate reports) and RUF (forensic reports) emails
+        const reportingEmails = [];
+        
+        const ruaMatch = dmarcData.match(/rua=mailto:([^;,\s]+)/gi);
+        if (ruaMatch) {
+            ruaMatch.forEach(match => {
+                const email = match.replace(/rua=mailto:/i, '');
+                reportingEmails.push({ email, type: 'aggregate' });
+            });
+        }
+        
+        const rufMatch = dmarcData.match(/ruf=mailto:([^;,\s]+)/gi);
+        if (rufMatch) {
+            rufMatch.forEach(match => {
+                const email = match.replace(/ruf=mailto:/i, '');
+                reportingEmails.push({ email, type: 'forensic' });
+            });
+        }
+        
+        // Check each reporting email to see if it's external
+        reportingEmails.forEach(({ email, type }) => {
+            const emailDomain = email.split('@')[1];
+            if (emailDomain && emailDomain !== domainBeingAnalyzed) {
+                // This is a third-party DMARC reporting service
+                const serviceName = this.identifyDMARCReportingService(emailDomain);
+                const serviceDescription = `DMARC ${type} reporting service`;
+                
+                this.addOrUpdateService(
+                    detectedServices, 
+                    serviceName, 
+                    {
+                        description: serviceDescription,
+                        reportingEmail: email,
+                        reportingType: type,
+                        domain: emailDomain
+                    }, 
+                    'security', 
+                    record, 
+                    'DMARC'
+                );
+            }
+        });
+    }
+
+    // Identify known DMARC reporting services by domain
+    identifyDMARCReportingService(domain) {
+        const dmarcServices = {
+            'dmarcian.com': 'Dmarcian',
+            'valimail.com': 'Valimail',
+            'ondmarc.redsift.com': 'OnDMARC',
+            'dmarc.postmarkapp.com': 'Postmark DMARC',
+            'reports.dmarc.cyber.gov.au': 'Australian Cyber Security Centre',
+            'dmarc-reports.cloudflare.com': 'Cloudflare DMARC',
+            'dmarc.microsoft.com': 'Microsoft DMARC',
+            'google.com': 'Google DMARC',
+            'reports.uri.us': 'URI DMARC',
+            'agari.com': 'Agari',
+            'fraudmarc.com': 'FraudMARC',
+            'returnpath.com': 'Return Path',
+            'proofpoint.com': 'Proofpoint'
+        };
+        
+        // Check for exact domain match
+        if (dmarcServices[domain]) {
+            return dmarcServices[domain];
+        }
+        
+        // Check for subdomain matches
+        for (const [serviceDomain, serviceName] of Object.entries(dmarcServices)) {
+            if (domain.endsWith(serviceDomain)) {
+                return serviceName;
+            }
+        }
+        
+        // If not recognized, create a generic name based on domain
+        const domainParts = domain.split('.');
+        const mainDomain = domainParts.length >= 2 ? 
+            domainParts[domainParts.length - 2] : domain;
+        
+        return `${mainDomain.charAt(0).toUpperCase() + mainDomain.slice(1)} DMARC Service`;
     }
 
     // Classify vendor from ASN information

@@ -130,7 +130,7 @@ class AnalysisController {
         
         // Detect services from main domain
         if (mainDomainResults.records) {
-            const services = this.serviceDetector.detectServices(mainDomainResults.records);
+            const services = this.serviceDetector.detectServices(mainDomainResults.records, domain);
             mainDomainResults.services = services;
             this.debug.logJSON('Services detected from main domain:', services);
             console.log(`✅ Found ${services.length} services from main domain`);
