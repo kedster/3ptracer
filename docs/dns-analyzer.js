@@ -41,8 +41,9 @@ class DNSAnalyzer {
         };
     }
 
-    // Reset statistics for new analysis
+    // Reset all internal state for new analysis
     resetStats() {
+        // Reset statistics
         this.stats = {
             dnsQueries: 0,
             apiCalls: 0,
@@ -54,6 +55,17 @@ class DNSAnalyzer {
             startTime: Date.now(),
             endTime: null
         };
+        
+        // Clear all internal arrays and sets
+        this.globalSubdomains.clear();
+        this.processedSubdomains.clear();
+        this.subdomainCallbacks = [];
+        this.notificationCallback = null;
+        this.historicalRecords = [];
+        this.ctCache.clear();
+        this.currentDomain = '';
+        
+        console.log('🧹 DNS Analyzer internal state cleared for new analysis');
     }
     
     // Set current domain for intelligent record querying
@@ -123,6 +135,18 @@ class DNSAnalyzer {
         return this.historicalRecords;
     }
 
+    // Check if CNAME points to main domain
+    isCNAMEToMainDomain(cnameTarget) {
+        if (!cnameTarget || !this.currentDomain) return false;
+        
+        // Remove trailing dot and compare
+        const cleanTarget = cnameTarget.replace(/\.$/, '');
+        const cleanMainDomain = this.currentDomain.replace(/\.$/, '');
+        
+        // Check if CNAME target is the main domain
+        return cleanTarget === cleanMainDomain;
+    }
+
     // Process subdomain immediately when discovered
     async processSubdomainImmediately(subdomain, source, certInfo = null) {
         if (this.processedSubdomains.has(subdomain)) {
@@ -138,22 +162,46 @@ class DNSAnalyzer {
             // Analyze the subdomain
             const analysis = await this.analyzeSingleSubdomain(subdomain);
             
+            // Check if this is a CNAME redirect to main domain
+            if (analysis.records.CNAME && analysis.records.CNAME.length > 0) {
+                const cnameTarget = analysis.records.CNAME[0].data;
+                if (this.isCNAMEToMainDomain(cnameTarget)) {
+                    // This is a redirect to main domain - mark as redirect and skip further analysis
+                    analysis.isRedirectToMain = true;
+                    analysis.redirectTarget = cnameTarget;
+                    console.log(`🔄 Redirect detected: ${subdomain} → ${cnameTarget} (main domain) - skipping detailed analysis`);
+                    
+                    // Notify about redirect completion
+                    this.subdomainCallbacks.forEach(callback => {
+                        try {
+                            callback(subdomain, source, analysis);
+                        } catch (error) {
+                            console.warn('Redirect callback error:', error);
+                        }
+                    });
+                    return; // Skip further analysis
+                }
+            }
+            
             // Check if this is a historical record (no DNS records found)
             if ((!analysis.records.A || analysis.records.A.length === 0) && 
                 (!analysis.records.CNAME || analysis.records.CNAME.length === 0)) {
                 
                 // This is a historical record - no active DNS
-                if (certInfo) {
-                    const historicalRecord = {
-                        subdomain: subdomain,
-                        source: source,
-                        certificateInfo: certInfo,
-                        discoveredAt: new Date().toISOString(),
-                        status: 'Historical/Obsolete'
-                    };
-                    this.historicalRecords.push(historicalRecord);
-                    console.log(`📜 Historical record found: ${subdomain} (no active DNS, certificate from ${source})`);
-                }
+                const historicalRecord = {
+                    subdomain: subdomain,
+                    source: source,
+                    certificateInfo: certInfo || {
+                        issuer: 'No certificate info available',
+                        notBefore: null,
+                        notAfter: null,
+                        certificateId: null
+                    },
+                    discoveredAt: new Date().toISOString(),
+                    status: 'Historical/Obsolete'
+                };
+                this.historicalRecords.push(historicalRecord);
+                console.log(`📜 Historical record found: ${subdomain} (no active DNS, source: ${source})`);
             }
             
             // Notify about analysis completion
@@ -221,43 +269,14 @@ class DNSAnalyzer {
                     }
                 }
                 
-                // Query additional record types for comprehensive analysis
-                // Only query TXT and MX for subdomains that are likely to have them
-                const additionalTypes = [];
+                // For subdomains, we don't need to query MX, TXT, or NS records
+                // These are typically only relevant for the main domain:
+                // - MX: Email routing (domain-level)
+                // - TXT: Domain policies like SPF, DMARC, verification (domain-level)  
+                // - NS: Authoritative nameservers (domain-level)
+                // Subdomains typically only need A/AAAA and CNAME records
                 
-                // Only query TXT for subdomains that might have verification records
-                // (main domain, www, or common verification subdomains)
-                if (subdomain === this.currentDomain || 
-                    subdomain === `www.${this.currentDomain}` ||
-                    subdomain.includes('verify') ||
-                    subdomain.includes('auth') ||
-                    subdomain.includes('security')) {
-                    additionalTypes.push('TXT');
-                }
-                
-                // Only query MX for subdomains that might have email services
-                // (main domain, mail, smtp, or common email subdomains)
-                if (subdomain === this.currentDomain ||
-                    subdomain.includes('mail') ||
-                    subdomain.includes('smtp') ||
-                    subdomain.includes('email') ||
-                    subdomain.includes('mx')) {
-                    additionalTypes.push('MX');
-                }
-                
-                // Always query NS for infrastructure analysis
-                additionalTypes.push('NS');
-                
-                for (const type of additionalTypes) {
-                    try {
-                        const typeRecords = await this.queryDNS(subdomain, type);
-                        if (typeRecords && typeRecords.length > 0) {
-                            analysis.records[type] = typeRecords;
-                        }
-                    } catch (error) {
-                        console.warn(`  ⚠️  Failed to query ${type} records for ${subdomain}:`, error.message);
-                    }
-                }
+                console.log(`  ✅ Subdomain ${subdomain} analysis complete - skipping MX/TXT/NS queries`);
                 
                 // Get ASN info if we have an IP
                 if (analysis.ip && /^(?:[0-9]{1,3}\.){3}[0-9]{1,3}$/.test(analysis.ip)) {
@@ -271,32 +290,30 @@ class DNSAnalyzer {
                     }
                 }
                 
-                // Check for takeover if we have CNAME records
+                // Check for takeover and detect services from CNAME records
                 if (analysis.records.CNAME && analysis.records.CNAME.length > 0) {
                     const cnameTarget = analysis.records.CNAME[0].data.replace(/\.$/, '');
+                    analysis.cnameTarget = cnameTarget;
+                    
+                    // Detect takeover
                     const takeover = await this.detectTakeover(subdomain, cnameTarget);
                     if (takeover) {
                         analysis.takeover = takeover;
                         this.stats.takeoversDetected++;
                     }
+                    
+                    // Detect third-party service
+                    const detectedService = this.identifyServiceFromCNAME(cnameTarget);
+                    if (detectedService) {
+                        analysis.detectedService = detectedService;
+                        console.log(`  🎯 Detected service: ${detectedService.name} (${detectedService.category}) for ${subdomain}`);
+                    }
                 }
             }
 
-            // Note: TXT and MX records are now queried intelligently above
-            // Only query them here if they weren't already queried
-            if (!analysis.records.TXT) {
-                const txtRecords = await this.queryDNS(subdomain, 'TXT');
-                if (txtRecords && txtRecords.length > 0) {
-                    analysis.records.TXT = txtRecords;
-                }
-            }
-
-            if (!analysis.records.MX) {
-                const mxRecords = await this.queryDNS(subdomain, 'MX');
-                if (mxRecords && mxRecords.length > 0) {
-                    analysis.records.MX = mxRecords;
-                }
-            }
+            // TXT and MX records are not queried for subdomains as they are typically
+            // only relevant at the domain level (SPF, DMARC, email routing, etc.)
+            // This optimization reduces unnecessary DNS queries by ~50% for subdomain analysis
 
             console.log(`✅ Single subdomain analysis complete: ${subdomain} (IP: ${analysis.ip || 'none'})`);
             return analysis;
@@ -365,109 +382,69 @@ class DNSAnalyzer {
         return chain;
     }
     
-    // Detect primary service from first CNAME target
+    // Simplified service detection from CNAME target
     detectPrimaryService(firstCNAME) {
         if (!firstCNAME) return null;
         
         const target = firstCNAME.toLowerCase();
         
-        // Identity and Access Management
-        if (target.includes('okta.com')) {
-            return { name: 'Okta', category: 'security', description: 'Identity and access management platform' };
-        }
-        if (target.includes('auth0.com')) {
-            return { name: 'Auth0', category: 'security', description: 'Identity and access management platform' };
-        }
-        if (target.includes('onelogin.com')) {
-            return { name: 'OneLogin', category: 'security', description: 'Identity and access management platform' };
+        // Comprehensive service patterns for CNAME detection
+        const servicePatterns = [
+            // Identity & Authentication
+            { pattern: 'okta.com', name: 'Okta', category: 'security', description: 'Identity and access management platform' },
+            { pattern: 'auth0.com', name: 'Auth0', category: 'security', description: 'Identity and access management platform' },
+            
+            // Payment Services
+            { pattern: 'stripecdn.com', name: 'Stripe', category: 'payment', description: 'Payment processing platform' },
+            { pattern: 'stripe.com', name: 'Stripe', category: 'payment', description: 'Payment processing platform' },
+            { pattern: 'paypal.com', name: 'PayPal', category: 'payment', description: 'Payment processing platform' },
+            
+            // Productivity & Office Suites
+            { pattern: 'zohohost.eu', name: 'Zoho', category: 'productivity', description: 'Business productivity suite' },
+            { pattern: 'zoho.com', name: 'Zoho', category: 'productivity', description: 'Business productivity suite' },
+            { pattern: 'zohohost.com', name: 'Zoho', category: 'productivity', description: 'Business productivity suite' },
+            
+            // CDN & Cloud Services
+            { pattern: 'cloudflare', name: 'Cloudflare', category: 'cloud', description: 'CDN and security services' },
+            { pattern: 'cloudfront.net', name: 'AWS CloudFront', category: 'cloud', description: 'Amazon content delivery network' },
+            { pattern: 'fastly.com', name: 'Fastly', category: 'cloud', description: 'Edge cloud platform' },
+            
+            // Hosting Platforms
+            { pattern: 'heroku', name: 'Heroku', category: 'cloud', description: 'Cloud application platform' },
+            { pattern: 'netlify', name: 'Netlify', category: 'cloud', description: 'Static site hosting' },
+            { pattern: 'vercel', name: 'Vercel', category: 'cloud', description: 'Frontend deployment platform' },
+            { pattern: 'github', name: 'GitHub Pages', category: 'cloud', description: 'Static site hosting' },
+            { pattern: 'wixdns.net', name: 'Wix', category: 'cloud', description: 'Website builder platform' },
+            { pattern: 'wix.com', name: 'Wix', category: 'cloud', description: 'Website builder platform' },
+            
+            // Documentation & Content
+            { pattern: 'gitbook.io', name: 'GitBook', category: 'documentation', description: 'Documentation platform' },
+            { pattern: 'notion.so', name: 'Notion', category: 'documentation', description: 'Workspace and documentation platform' },
+            
+            // Customer Feedback & Support
+            { pattern: 'canny.io', name: 'Canny Feedback', category: 'feedback', description: 'Product feedback platform' },
+            { pattern: 'zendesk.com', name: 'Zendesk', category: 'support', description: 'Customer support platform' },
+            { pattern: 'intercom.io', name: 'Intercom', category: 'support', description: 'Customer messaging platform' },
+            
+            // Analytics & Marketing
+            { pattern: 'hubspot.com', name: 'HubSpot', category: 'marketing', description: 'Marketing and CRM platform' },
+            { pattern: 'mailchimp.com', name: 'Mailchimp', category: 'marketing', description: 'Email marketing platform' },
+            
+            // Development Tools
+            { pattern: 'gitpod.io', name: 'Gitpod', category: 'development', description: 'Cloud development environment' }
+        ];
+        
+        for (const service of servicePatterns) {
+            if (target.includes(service.pattern)) {
+                return {
+                    name: service.name,
+                    category: service.category,
+                    description: service.description
+                };
+            }
         }
         
-        // Email services
-        if (target.includes('google') && (target.includes('mail') || target.includes('gmail'))) {
-            return { name: 'Google Workspace (Gmail)', category: 'email', description: 'Email hosting and productivity suite' };
-        }
-        if (target.includes('outlook') || target.includes('office365')) {
-            return { name: 'Microsoft 365 (Outlook)', category: 'email', description: 'Email hosting and productivity suite' };
-        }
-        if (target.includes('zoho')) {
-            return { name: 'Zoho Mail', category: 'email', description: 'Business email hosting' };
-        }
-        if (target.includes('sendgrid')) {
-            return { name: 'SendGrid', category: 'email', description: 'Email delivery service' };
-        }
-        if (target.includes('mailgun')) {
-            return { name: 'Mailgun', category: 'email', description: 'Email API service' };
-        }
-        
-        // Cloud and hosting services
-        if (target.includes('cloudflare')) {
-            return { name: 'Cloudflare', category: 'cloud', description: 'CDN, security services, and DNS management' };
-        }
-        if (target.includes('heroku')) {
-            return { name: 'Heroku', category: 'cloud', description: 'Cloud application platform' };
-        }
-        if (target.includes('netlify')) {
-            return { name: 'Netlify', category: 'cloud', description: 'Static site hosting' };
-        }
-        if (target.includes('vercel')) {
-            return { name: 'Vercel', category: 'cloud', description: 'Frontend deployment platform' };
-        }
-        if (target.includes('github')) {
-            return { name: 'GitHub Pages', category: 'cloud', description: 'Static site hosting' };
-        }
-        
-        // Analytics services
-        if (target.includes('google-analytics') || target.includes('gtag')) {
-            return { name: 'Google Analytics', category: 'analytics', description: 'Web analytics service' };
-        }
-        if (target.includes('mixpanel')) {
-            return { name: 'Mixpanel', category: 'analytics', description: 'Product analytics' };
-        }
-        if (target.includes('hotjar')) {
-            return { name: 'Hotjar', category: 'analytics', description: 'User behavior analytics' };
-        }
-        if (target.includes('intercom')) {
-            return { name: 'Intercom', category: 'feedback', description: 'Customer messaging platform' };
-        }
-        
-        // Security services
-        if (target.includes('sucuri')) {
-            return { name: 'Sucuri', category: 'security', description: 'Website security service' };
-        }
-        if (target.includes('incapsula')) {
-            return { name: 'Imperva', category: 'security', description: 'DDoS protection service' };
-        }
-        
-        // CRM and business tools
-        if (target.includes('salesforce')) {
-            return { name: 'Salesforce', category: 'cloud', description: 'Customer relationship management' };
-        }
-        if (target.includes('hubspot')) {
-            return { name: 'HubSpot', category: 'cloud', description: 'Marketing and CRM platform' };
-        }
-        if (target.includes('zendesk')) {
-            return { name: 'Zendesk', category: 'feedback', description: 'Customer support platform' };
-        }
-        
-        // Custom domains for common services
-        if (target.includes('custom.lemlist')) {
-            return { name: 'Lemlist', category: 'cloud', description: 'Email outreach platform' };
-        }
-        if (target.includes('custom.mailchimp')) {
-            return { name: 'Mailchimp', category: 'cloud', description: 'Email marketing service' };
-        }
-        
-        // GitBook services
-        if (target.includes('gitbook.io')) {
-            return { name: 'GitBook', category: 'documentation', description: 'Documentation platform' };
-        }
-        
-        // Canny feedback services
-        if (target.includes('canny.io')) {
-            return { name: 'Canny Feedback', category: 'feedback', description: 'Product feedback platform' };
-        }
-        
-        return null; // No primary service detected
+        return null;
     }
     
     // Detect infrastructure from final CNAME target
@@ -505,142 +482,9 @@ class DNSAnalyzer {
         return null; // No infrastructure detected
     }
     
-    // Detect common third-party services from CNAME target (legacy method)
+    // Use primary service detection for CNAME targets
     detectCNAMEService(cnameTarget) {
-        if (!cnameTarget) return null;
-        
-        const target = cnameTarget.toLowerCase();
-        
-        // Email services
-        if (target.includes('google') && (target.includes('mail') || target.includes('gmail'))) {
-            return { name: 'Google Workspace (Gmail)', category: 'email', description: 'Email hosting and productivity suite' };
-        }
-        if (target.includes('outlook') || target.includes('office365')) {
-            return { name: 'Microsoft 365 (Outlook)', category: 'email', description: 'Email hosting and productivity suite' };
-        }
-        if (target.includes('zoho')) {
-            return { name: 'Zoho Mail', category: 'email', description: 'Business email hosting' };
-        }
-        if (target.includes('sendgrid')) {
-            return { name: 'SendGrid', category: 'email', description: 'Email delivery service' };
-        }
-        if (target.includes('mailgun')) {
-            return { name: 'Mailgun', category: 'email', description: 'Email API service' };
-        }
-        
-        // Cloud and hosting services
-        if (target.includes('cloudflare')) {
-            return { name: 'Cloudflare', category: 'cloud', description: 'CDN, security services, and DNS management' };
-        }
-        if (target.includes('fastly')) {
-            return { name: 'Fastly', category: 'cloud', description: 'CDN service' };
-        }
-        if (target.includes('akamai')) {
-            return { name: 'Akamai', category: 'cloud', description: 'CDN and security service' };
-        }
-        if (target.includes('heroku')) {
-            return { name: 'Heroku', category: 'cloud', description: 'Cloud application platform' };
-        }
-        if (target.includes('netlify')) {
-            return { name: 'Netlify', category: 'cloud', description: 'Static site hosting' };
-        }
-        if (target.includes('vercel')) {
-            return { name: 'Vercel', category: 'cloud', description: 'Frontend deployment platform' };
-        }
-        if (target.includes('github')) {
-            return { name: 'GitHub Pages', category: 'cloud', description: 'Static site hosting' };
-        }
-        
-        // Analytics services
-        if (target.includes('google-analytics') || target.includes('gtag')) {
-            return { name: 'Google Analytics', category: 'analytics', description: 'Web analytics service' };
-        }
-        if (target.includes('mixpanel')) {
-            return { name: 'Mixpanel', category: 'analytics', description: 'Product analytics' };
-        }
-        if (target.includes('hotjar')) {
-            return { name: 'Hotjar', category: 'analytics', description: 'User behavior analytics' };
-        }
-        if (target.includes('intercom')) {
-            return { name: 'Intercom', category: 'feedback', description: 'Customer messaging platform' };
-        }
-        
-        // Security services
-        if (target.includes('sucuri')) {
-            return { name: 'Sucuri', category: 'security', description: 'Website security service' };
-        }
-        if (target.includes('incapsula')) {
-            return { name: 'Imperva', category: 'security', description: 'DDoS protection service' };
-        }
-        
-        // CRM and business tools
-        if (target.includes('salesforce')) {
-            return { name: 'Salesforce', category: 'cloud', description: 'Customer relationship management' };
-        }
-        if (target.includes('hubspot')) {
-            return { name: 'HubSpot', category: 'cloud', description: 'Marketing and CRM platform' };
-        }
-        if (target.includes('zendesk')) {
-            return { name: 'Zendesk', category: 'feedback', description: 'Customer support platform' };
-        }
-        
-        // Custom domains for common services
-        if (target.includes('custom.lemlist')) {
-            return { name: 'Lemlist', category: 'cloud', description: 'Email outreach platform' };
-        }
-        if (target.includes('custom.mailchimp')) {
-            return { name: 'Mailchimp', category: 'cloud', description: 'Email marketing service' };
-        }
-        
-        // AWS services
-        if (target.includes('awsapprunner.com')) {
-            return { name: 'AWS App Runner', category: 'cloud', description: 'Containerized application hosting' };
-        }
-        if (target.includes('awsglobalaccelerator.com')) {
-            return { name: 'AWS Global Accelerator', category: 'cloud', description: 'Global application accelerator' };
-        }
-        
-        // DigitalOcean services
-        if (target.includes('ondigitalocean.app')) {
-            return { name: 'DigitalOcean App Platform', category: 'cloud', description: 'Application hosting platform' };
-        }
-        
-        // GitBook services
-        if (target.includes('gitbook.io')) {
-            return { name: 'GitBook', category: 'documentation', description: 'Documentation platform' };
-        }
-        
-        // Canny feedback services
-        if (target.includes('canny.io')) {
-            return { name: 'Canny Feedback', category: 'feedback', description: 'Product feedback platform' };
-        }
-        
-        // Okta identity services
-        if (target.includes('okta.com')) {
-            return { name: 'Okta', category: 'security', description: 'Identity and access management' };
-        }
-        
-        // AWS services (general)
-        if (target.includes('amazonaws.com')) {
-            return { name: 'Amazon Web Services (AWS)', category: 'cloud', description: 'Cloud computing platform' };
-        }
-        
-        // Azure services
-        if (target.includes('azurewebsites.net')) {
-            return { name: 'Microsoft Azure', category: 'cloud', description: 'Cloud computing platform' };
-        }
-        
-        // Documentation platforms
-        if (target.includes('gitbook.io')) {
-            return { name: 'GitBook', category: 'Documentation', description: 'Documentation platform' };
-        }
-        
-        // Feedback platforms
-        if (target.includes('canny.io')) {
-            return { name: 'Canny', category: 'Feedback', description: 'Product feedback and feature request platform' };
-        }
-        
-        return { name: 'Unknown Service', category: 'Other', description: `Custom CNAME target: ${cnameTarget}` };
+        return this.detectPrimaryService(cnameTarget);
     }
 
     // Start certificate transparency queries early (non-blocking)
@@ -810,7 +654,13 @@ class DNSAnalyzer {
             services: []
         };
 
-        // Query different record types
+        // Query all record types for the main domain
+        // Main domains need comprehensive analysis including:
+        // - A: IP addresses
+        // - CNAME: Aliases (less common for main domains)
+        // - TXT: Verification, SPF, DMARC policies
+        // - MX: Email routing
+        // - NS: Authoritative nameservers
         const recordTypes = ['A', 'CNAME', 'TXT', 'MX', 'NS'];
         
         for (const type of recordTypes) {
@@ -1149,33 +999,92 @@ class DNSAnalyzer {
         for (const subdomain of subdomains) {
             try {
                 console.log(`  📡 Querying DNS for subdomain: ${subdomain}`);
-                const records = await this.queryDNS(subdomain, 'A');
+                // Query for both A and CNAME records to detect redirects
+                const records = await this.queryDNS(subdomain);
                 if (records && records.length > 0) {
-                    // Check if the record data is an IP address
-                    const recordData = records[0].data;
-                    const isIP = /^(?:[0-9]{1,3}\.){3}[0-9]{1,3}$/.test(recordData);
+                    // Check for CNAME records first
+                    const cnameRecords = records.filter(r => r.type === 5); // CNAME type
+                    const aRecords = records.filter(r => r.type === 1); // A type
                     
-                    if (isIP) {
-                        results.push({
+                    if (cnameRecords.length > 0) {
+                        const cnameTarget = cnameRecords[0].data;
+                        
+                        // Check if this is a redirect to main domain
+                        if (this.isCNAMEToMainDomain(cnameTarget)) {
+                            console.log(`  🔄 Redirect detected: ${subdomain} → ${cnameTarget} (main domain)`);
+                            results.push({
+                                subdomain: subdomain,
+                                records: records,
+                                isRedirectToMain: true,
+                                redirectTarget: cnameTarget,
+                                ip: null
+                            });
+                            continue; // Skip further analysis for redirects
+                        }
+                        
+                        // Regular CNAME (not to main domain)
+                        console.log(`  🔗 Subdomain ${subdomain} has CNAME to ${cnameTarget}`);
+                        
+                        // Detect third-party service from CNAME target
+                        const detectedService = this.identifyServiceFromCNAME(cnameTarget);
+                        
+                        const subdomainResult = {
                             subdomain: subdomain,
                             records: records,
-                            ip: recordData
-                        });
-                        console.log(`  ✅ Subdomain ${subdomain} resolved to IP ${recordData}`);
+                            ip: null, // CNAME doesn't have direct IP
+                            cnameTarget: cnameTarget
+                        };
+                        
+                        // Add service information if detected
+                        if (detectedService) {
+                            subdomainResult.detectedService = detectedService;
+                            console.log(`  🎯 Detected service: ${detectedService.name} (${detectedService.category}) for ${subdomain}`);
+                        }
+                        
+                        results.push(subdomainResult);
+                    } else if (aRecords.length > 0) {
+                        // Check if the record data is an IP address
+                        const recordData = aRecords[0].data;
+                        const isIP = /^(?:[0-9]{1,3}\.){3}[0-9]{1,3}$/.test(recordData);
+                        
+                        if (isIP) {
+                            results.push({
+                                subdomain: subdomain,
+                                records: records,
+                                ip: recordData
+                            });
+                            console.log(`  ✅ Subdomain ${subdomain} resolved to IP ${recordData}`);
+                        } else {
+                            console.log(`  ⚠️  Subdomain ${subdomain} resolved to domain ${recordData} (not an IP)`);
+                            results.push({
+                                subdomain: subdomain,
+                                records: records,
+                                ip: null
+                            });
+                        }
                     } else {
-                        // If it's not an IP, it might be a CNAME or other record type
-                        console.log(`  ⚠️  Subdomain ${subdomain} resolved to domain ${recordData} (not an IP)`);
+                        console.log(`  ⚠️  Subdomain ${subdomain} has no A or CNAME records`);
                         results.push({
                             subdomain: subdomain,
                             records: records,
-                            ip: null // No IP for ASN lookup
+                            ip: null
                         });
                     }
                 } else {
-                    console.log(`  ⚠️  Subdomain ${subdomain} has no A records`);
+                    console.log(`  ⚠️  Subdomain ${subdomain} has no DNS records`);
+                    results.push({
+                        subdomain: subdomain,
+                        records: [],
+                        ip: null
+                    });
                 }
             } catch (error) {
                 console.warn(`  ❌ Failed to analyze subdomain ${subdomain}:`, error.message);
+                results.push({
+                    subdomain: subdomain,
+                    records: [],
+                    ip: null
+                });
             }
         }
 
@@ -1183,30 +1092,78 @@ class DNSAnalyzer {
         return results;
     }
 
-    // Get ASN information for IP
+    // Get ASN information for IP with multiple fallback sources
     async getASNInfo(ip) {
-        try {
-            const response = await fetch(`https://ipinfo.io/${ip}/json`);
-            if (!response.ok) {
-                throw new Error(`ASN query failed: ${response.status}`);
+        const providers = [
+            {
+                name: 'ipinfo.io',
+                url: `https://ipinfo.io/${ip}/json`,
+                transform: (data) => ({
+                    asn: data.org || 'Unknown',
+                    isp: data.org || 'Unknown',
+                    location: data.country || 'Unknown',
+                    city: data.city || 'Unknown'
+                })
+            },
+            {
+                name: 'ip-api.com',
+                url: `http://ip-api.com/json/${ip}`,
+                transform: (data) => ({
+                    asn: data.as || 'Unknown',
+                    isp: data.isp || 'Unknown',
+                    location: data.countryCode || 'Unknown',
+                    city: data.city || 'Unknown'
+                })
+            },
+            {
+                name: 'ipapi.co',
+                url: `https://ipapi.co/${ip}/json/`,
+                transform: (data) => ({
+                    asn: data.asn || 'Unknown',
+                    isp: data.org || 'Unknown',
+                    location: data.country_code || 'Unknown',
+                    city: data.city || 'Unknown'
+                })
             }
+        ];
 
-            const data = await response.json();
-            return {
-                asn: data.org || 'Unknown',
-                isp: data.org || 'Unknown',
-                location: data.country || 'Unknown',
-                city: data.city || 'Unknown'
-            };
-        } catch (error) {
-            console.warn(`Failed to get ASN info for ${ip}:`, error);
-            return {
-                asn: 'Unknown',
-                isp: 'Unknown',
-                location: 'Unknown',
-                city: 'Unknown'
-            };
+        for (const provider of providers) {
+            try {
+                const response = await fetch(provider.url, {
+                    method: 'GET',
+                    headers: {
+                        'Accept': 'application/json',
+                        'User-Agent': '3rdPartyTracer/1.0'
+                    }
+                });
+
+                if (!response.ok) {
+                    console.warn(`Provider ${provider.name} failed for ${ip}: ${response.status}`);
+                    continue;
+                }
+
+                const data = await response.json();
+                
+                // Check if we got valid data
+                if (data && (data.asn || data.org || data.as)) {
+                    const result = provider.transform(data);
+                    console.log(`✅ ASN info for ${ip} from ${provider.name}:`, result);
+                    return result;
+                }
+            } catch (error) {
+                console.warn(`Provider ${provider.name} error for ${ip}:`, error.message);
+                continue;
+            }
         }
+
+        // All providers failed
+        console.warn(`❌ All ASN providers failed for ${ip}`);
+        return {
+            asn: 'Unknown',
+            isp: 'Unknown',
+            location: 'Unknown',
+            city: 'Unknown'
+        };
     }
 
     // Detect subdomain takeover

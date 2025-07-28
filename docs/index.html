@@ -9,8 +9,11 @@
 <body>
     <div class="container">
         <div class="header">
-            <h1>3rd Party Tracer</h1>
-            <p>Identify third-party services associated with any domain through DNS analysis</p>
+            <h1><a href="index.html" style="color: white; text-decoration: none;">3rd Party Tracer</a></h1>
+            <p>Identify third-party services associated with any domain via DNS analysis</p>
+            <div style="margin-top: 20px;">
+                <a href="about.html" class="header-nav-link" style="color: white; text-decoration: none; padding: 8px 16px; border: 1px solid rgba(255,255,255,0.3); border-radius: 6px; font-size: 0.9rem; transition: background 0.3s ease;">About</a>
+            </div>
         </div>
 
         <div class="content">
@@ -18,6 +21,15 @@
                 <div class="form-group">
                     <label for="domain">Enter Domain Name:</label>
                     <input type="text" id="domain" placeholder="example.com" autocomplete="off">
+                </div>
+                <div class="form-group" style="margin-top: 15px;">
+                    <label style="display: inline-flex; align-items: center; cursor: pointer;">
+                        <input type="checkbox" id="debugMode" style="margin-right: 8px;">
+                        Enable Debug Mode
+                    </label>
+                    <small style="display: block; margin-top: 5px; color: #666; font-size: 0.85rem;">
+                        Shows detailed console output for debugging
+                    </small>
                 </div>
                 <button class="analyze-btn" onclick="analyzeDomain()">Analyze Domain</button>
             </div>
@@ -73,6 +85,16 @@
                 </div>
 
                 <div class="service-category">
+                    <div class="category-header">🔍 Interesting Findings</div>
+                    <div class="service-list" id="interestingFindings"></div>
+                </div>
+
+                <div class="service-category">
+                    <div class="category-header">🔄 Subdomain Redirects to Main Domain</div>
+                    <div class="service-list" id="redirectsToMain"></div>
+                </div>
+
+                <div class="service-category">
                     <div class="category-header">🌐 Subdomains</div>
                     <div class="service-list" id="subdomainServices"></div>
                 </div>
@@ -80,6 +102,11 @@
                 <div class="service-category">
                     <div class="category-header">🔗 CNAME Mappings</div>
                     <div class="service-list" id="cnameMappings"></div>
+                </div>
+
+                <div class="service-category">
+                    <div class="category-header">🔧 DNS Records</div>
+                    <div class="service-list" id="dnsRecords"></div>
                 </div>
 
                 <div class="service-category">
@@ -117,16 +144,24 @@
                     <p class="footer-note">Hands-on training in cloud security, Android security, and software supply chain protection</p>
                 </div>
             </div>
-            <div class="footer-bottom">
-                <p>&copy; 2025 Cyfinoid Research. 3rd Party Tracer - Free Cloud Security Research Tool</p>
-            </div>
+                                <div class="footer-bottom">
+                        <p>&copy; 2025 Cyfinoid Research. 3rd Party Tracer - Free Cloud Security Research Tool</p>
+                        <p style="margin-top: 10px; font-size: 0.9rem;">
+                            <a href="about.html" style="color: rgba(255, 255, 255, 0.8); text-decoration: none;">About</a> | 
+                            <a href="https://github.com/cyfinoid/3ptracer" target="_blank" style="color: rgba(255, 255, 255, 0.8); text-decoration: none;">GitHub</a> | 
+                            <a href="https://cyfinoid.com/" target="_blank" style="color: rgba(255, 255, 255, 0.8); text-decoration: none;">Cyfinoid Research</a>
+                        </p>
+                    </div>
         </footer>
     </div>
 
     <script src="subdomain-registry.js"></script>
     <script src="service-registry.js"></script>
     <script src="dns-analyzer.js"></script>
-    <script src="service-patterns.js"></script>
+    <script src="service-detection-engine.js"></script>
+    <script src="data-processor.js"></script>
+    <script src="ui-renderer.js"></script>
+    <script src="analysis-controller.js"></script>
     <script src="app.js"></script>
 </body>
 </html> 
