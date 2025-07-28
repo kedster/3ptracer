@@ -793,94 +793,62 @@ class UIRenderer {
         
         if (section) section.style.display = 'block';
         
-        let html = `
-            <div class="service-item" style="border-left: 4px solid #6c757d;">
-                <div class="service-name">📜 Historical/Obsolete Records</div>
-                <div class="service-description">
-                    <em>These subdomains were found in certificate transparency logs but have no active DNS records.</em>
-                </div>
-                <div style="margin-top: 15px;">
-                    <table style="width: 100%; border-collapse: collapse; font-size: 0.9rem;">
-                        <thead>
-                            <tr style="background: #f8f9fa; border-bottom: 2px solid #dee2e6;">
-                                <th style="padding: 8px; text-align: left; font-weight: 600;">📜 Subdomain</th>
-                                <th style="padding: 8px; text-align: left; font-weight: 600;">Source</th>
-                                <th style="padding: 8px; text-align: left; font-weight: 600;">Discovered</th>
-                                <th style="padding: 8px; text-align: left; font-weight: 600;">Issuer</th>
-                                <th style="padding: 8px; text-align: left; font-weight: 600;">Expiry</th>
-                            </tr>
-                        </thead>
-                        <tbody>
+        let html = '<h3>📜 Historical/Obsolete Records</h3>';
+        html += '<p style="color: #666; margin-bottom: 15px;">These subdomains were found in certificate transparency logs but have no active DNS records.</p>';
+        
+        html += `
+            <div style="overflow-x: auto; margin-top: 15px;">
+                <table style="width: 100%; border-collapse: collapse; font-family: 'Monaco', 'Menlo', monospace; font-size: 0.85rem; background: #fff; border-radius: 8px; overflow: hidden; box-shadow: 0 2px 4px rgba(0,0,0,0.1);">
+                    <thead>
+                        <tr style="background: #f8f9fa; border-bottom: 2px solid #dee2e6;">
+                            <th style="padding: 12px 8px; text-align: left; font-weight: 600; color: #495057; border-bottom: 2px solid #dee2e6; min-width: 200px;">📜 Subdomain</th>
+                            <th style="padding: 12px 8px; text-align: left; font-weight: 600; color: #495057; border-bottom: 2px solid #dee2e6; min-width: 100px;">Source</th>
+                            <th style="padding: 12px 8px; text-align: left; font-weight: 600; color: #495057; border-bottom: 2px solid #dee2e6; min-width: 100px;">Discovered</th>
+                            <th style="padding: 12px 8px; text-align: left; font-weight: 600; color: #495057; border-bottom: 2px solid #dee2e6; min-width: 120px;">Issuer</th>
+                            <th style="padding: 12px 8px; text-align: left; font-weight: 600; color: #495057; border-bottom: 2px solid #dee2e6; min-width: 100px;">Expiry</th>
+                        </tr>
+                    </thead>
+                    <tbody>
         `;
         
-        historicalRecords.forEach((record, index) => {
-            const rowStyle = index % 2 === 0 ? 'background: #f8f9fa;' : '';
-            const subdomain = record.subdomain || 'Unknown';
-            const source = record.source || 'Unknown';
-            const discovered = record.discoveredAt ? new Date(record.discoveredAt).toLocaleDateString() : 'Unknown';
+        historicalRecords.forEach(record => {
+            const certInfo = record.certificateInfo || {};
+            const discoveredDate = new Date(record.discoveredAt || Date.now()).toLocaleDateString();
             
-            // Extract issuer and expiry from certificate info
             let issuer = 'Unknown';
-            let expiry = 'Unknown';
-            
-            if (record.certificateInfo) {
-                if (record.certificateInfo.issuer && record.certificateInfo.issuer !== 'No certificate info available') {
-                    if (record.certificateInfo.issuer === 'No certificate info available') {
-                        issuer = 'N/A';
-                    } else if (record.certificateInfo.issuer.includes("Let's Encrypt")) {
-                        issuer = "Let's Encrypt";
-                    } else if (record.certificateInfo.issuer.includes('DigiCert')) {
-                        issuer = 'DigiCert';
-                    } else if (record.certificateInfo.issuer.includes('Amazon')) {
-                        issuer = 'Amazon RSA 2048 M03';
-                    } else if (record.certificateInfo.issuer.includes('Comodo')) {
-                        issuer = 'Comodo';
-                    } else if (record.certificateInfo.issuer.includes('GoDaddy')) {
-                        issuer = 'GoDaddy';
-                    } else if (record.certificateInfo.issuer.includes('GlobalSign')) {
-                        issuer = 'GlobalSign';
-                    } else {
-                        // Try to extract CN from issuer string
-                        const cnMatch = record.certificateInfo.issuer.match(/CN=([^,]+)/);
-                        issuer = cnMatch ? cnMatch[1] : 'Unknown';
-                    }
-                }
-                
-                if (record.certificateInfo.validTo) {
-                    expiry = new Date(record.certificateInfo.validTo).toLocaleDateString();
+            if (certInfo.issuer && certInfo.issuer !== 'No certificate found') {
+                if (certInfo.issuer === 'No certificate info available') {
+                    issuer = 'DNS Source';
+                } else if (certInfo.issuer.includes('Let\'s Encrypt')) issuer = 'Let\'s Encrypt';
+                else if (certInfo.issuer.includes('DigiCert')) issuer = 'DigiCert';
+                else if (certInfo.issuer.includes('Comodo')) issuer = 'Comodo';
+                else if (certInfo.issuer.includes('GoDaddy')) issuer = 'GoDaddy';
+                else if (certInfo.issuer.includes('GlobalSign')) issuer = 'GlobalSign';
+                else {
+                    const cnMatch = certInfo.issuer.match(/CN=([^,]+)/);
+                    issuer = cnMatch ? cnMatch[1] : 'Unknown';
                 }
             }
             
+            let expiryDate = 'Unknown';
+            if (certInfo.notAfter) {
+                expiryDate = new Date(certInfo.notAfter).toLocaleDateString();
+            }
+            
             html += `
-                <tr style="${rowStyle}">
-                    <td style="padding: 8px; border-bottom: 1px solid #dee2e6;">
-                        ${this.createSubdomainLink(subdomain)}
+                <tr style="border-bottom: 1px solid #e9ecef;">
+                    <td style="padding: 12px 8px; color: #495057; word-break: break-all;">
+                        ${this.createSubdomainLink(record.subdomain)}
                     </td>
-                    <td style="padding: 8px; border-bottom: 1px solid #dee2e6;">
-                        <span class="source-badge" style="background: #6c757d; color: white; padding: 2px 6px; border-radius: 3px; font-size: 0.8rem;">
-                            ${source}
-                        </span>
-                    </td>
-                    <td style="padding: 8px; border-bottom: 1px solid #dee2e6; color: #6c757d;">
-                        ${discovered}
-                    </td>
-                    <td style="padding: 8px; border-bottom: 1px solid #dee2e6; color: #6c757d;">
-                        ${issuer}
-                    </td>
-                    <td style="padding: 8px; border-bottom: 1px solid #dee2e6; color: #6c757d;">
-                        ${expiry}
-                    </td>
+                    <td style="padding: 12px 8px; color: #6c757d; font-size: 0.8rem;">${record.source}</td>
+                    <td style="padding: 12px 8px; color: #6c757d; font-size: 0.8rem;">${discoveredDate}</td>
+                    <td style="padding: 12px 8px; color: #6c757d; font-size: 0.8rem;">${issuer}</td>
+                    <td style="padding: 12px 8px; color: #6c757d; font-size: 0.8rem;">${expiryDate}</td>
                 </tr>
             `;
         });
         
-        html += `
-                        </tbody>
-                    </table>
-                </div>
-            </div>
-        `;
-        
+        html += '</tbody></table></div>';
         container.innerHTML = html;
     }
 

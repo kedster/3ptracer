@@ -303,7 +303,7 @@ class DNSAnalyzer {
                     }
                     
                     // Detect third-party service
-                    const detectedService = this.identifyServiceFromCNAME(cnameTarget);
+                    const detectedService = this.detectPrimaryService(cnameTarget);
                     if (detectedService) {
                         analysis.detectedService = detectedService;
                         console.log(`  🎯 Detected service: ${detectedService.name} (${detectedService.category}) for ${subdomain}`);
@@ -1026,7 +1026,7 @@ class DNSAnalyzer {
                         console.log(`  🔗 Subdomain ${subdomain} has CNAME to ${cnameTarget}`);
                         
                         // Detect third-party service from CNAME target
-                        const detectedService = this.identifyServiceFromCNAME(cnameTarget);
+                        const detectedService = this.detectPrimaryService(cnameTarget);
                         
                         const subdomainResult = {
                             subdomain: subdomain,

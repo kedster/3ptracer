@@ -111,8 +111,7 @@ class DataProcessor {
                     {
                         type: 'CNAME',
                         subdomain: subdomain.subdomain,
-                        target: subdomain.cnameTarget,
-                        record: { data: subdomain.cnameTarget }
+                        data: subdomain.cnameTarget
                     }
                 ]
             };
