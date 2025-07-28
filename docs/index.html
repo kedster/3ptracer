@@ -1,0 +1,132 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>3rd Party Tracer - Third Party Service Identifier</title>
+    <link rel="stylesheet" href="style.css">
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <h1>3rd Party Tracer</h1>
+            <p>Identify third-party services associated with any domain through DNS analysis</p>
+        </div>
+
+        <div class="content">
+            <div class="input-section">
+                <div class="form-group">
+                    <label for="domain">Enter Domain Name:</label>
+                    <input type="text" id="domain" placeholder="example.com" autocomplete="off">
+                </div>
+                <button class="analyze-btn" onclick="analyzeDomain()">Analyze Domain</button>
+            </div>
+
+            <div class="progress-section" id="progressSection">
+                <div class="progress-bar">
+                    <div class="progress-fill" id="progressFill"></div>
+                </div>
+                <div class="progress-text" id="progressText">Initializing...</div>
+            </div>
+
+            <div class="results" id="results">
+                <div class="stats" id="stats"></div>
+                
+                <div class="service-category" id="apiStatusSection" style="display: none;">
+                    <div class="category-header">⚠️ API Issues</div>
+                    <div class="service-list" id="apiNotifications"></div>
+                </div>
+                
+                <div class="service-category">
+                    <div class="category-header">🏢 Microsoft Services</div>
+                    <div class="service-list" id="microsoftServices"></div>
+                </div>
+
+                <div class="service-category">
+                    <div class="category-header">☁️ Amazon AWS Services</div>
+                    <div class="service-list" id="awsServices"></div>
+                </div>
+
+                <div class="service-category">
+                    <div class="category-header">📧 ProofPoint Services</div>
+                    <div class="service-list" id="proofpointServices"></div>
+                </div>
+
+                <div class="service-category">
+                    <div class="category-header">🔍 Google Services</div>
+                    <div class="service-list" id="googleServices"></div>
+                </div>
+
+                <div class="service-category">
+                    <div class="category-header">🛡️ Cloudflare Services</div>
+                    <div class="service-list" id="cloudflareServices"></div>
+                </div>
+
+                <div class="service-category">
+                    <div class="category-header">📚 Other Services</div>
+                    <div class="service-list" id="otherServices"></div>
+                </div>
+
+                <div class="service-category">
+                    <div class="category-header">🔒 Security Analysis</div>
+                    <div class="service-list" id="securityServices"></div>
+                </div>
+
+                <div class="service-category">
+                    <div class="category-header">🌐 Subdomains</div>
+                    <div class="service-list" id="subdomainServices"></div>
+                </div>
+
+                <div class="service-category">
+                    <div class="category-header">🔗 CNAME Mappings</div>
+                    <div class="service-list" id="cnameMappings"></div>
+                </div>
+
+                <div class="service-category">
+                    <div class="category-header">📜 Historical Records</div>
+                    <div class="service-list" id="historicalRecords"></div>
+                </div>
+            </div>
+        </div>
+        
+        <footer class="footer">
+            <div class="footer-content">
+                <div class="footer-section">
+                    <h3>🔬 Cyfinoid Research</h3>
+                    <p><strong>Cutting-Edge Cloud Security Research</strong></p>
+                    <p>Pioneering advanced cloud technology research and developing innovative cybersecurity tools for the community.</p>
+                    <p>This tool is part of our free research toolkit - helping organizations discover and analyze their cloud service dependencies.</p>
+                </div>
+                <div class="footer-section">
+                    <h4>🌐 Cloud Technology Focus</h4>
+                    <p>Specializing in cloud infrastructure analysis, third-party service discovery, and cloud security research.</p>
+                    <p>Our research tools help organizations understand their digital footprint and cloud service relationships.</p>
+                </div>
+                <div class="footer-section">
+                    <h4>🎓 Learn & Explore</h4>
+                    <p>Explore our professional training programs, latest research insights, and free open source tools developed from our cutting-edge cybersecurity research.</p>
+                    <div style="margin: 15px 0;">
+                        <a href="https://cyfinoid.com/trainings/" target="_blank" class="footer-link">Upcoming Trainings</a>
+                    </div>
+                    <div style="margin: 15px 0;">
+                        <a href="https://cyfinoid.com/blog/" target="_blank" class="footer-link">Read Our Blog</a>
+                    </div>
+                    <div style="margin: 15px 0;">
+                        <a href="https://cyfinoid.com/opensource-by-cyfinoid/" target="_blank" class="footer-link">Open Source By Cyfinoid</a>
+                    </div>
+                    <p class="footer-note">Hands-on training in cloud security, Android security, and software supply chain protection</p>
+                </div>
+            </div>
+            <div class="footer-bottom">
+                <p>&copy; 2025 Cyfinoid Research. 3rd Party Tracer - Free Cloud Security Research Tool</p>
+            </div>
+        </footer>
+    </div>
+
+    <script src="subdomain-registry.js"></script>
+    <script src="service-registry.js"></script>
+    <script src="dns-analyzer.js"></script>
+    <script src="service-patterns.js"></script>
+    <script src="app.js"></script>
+</body>
+</html> 
