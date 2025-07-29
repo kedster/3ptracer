@@ -515,9 +515,8 @@ class UIRenderer {
         
         let html = `
             <div class="service-item" style="border-left: 4px solid #28a745;">
-                <div class="service-name">🔄 Subdomain Redirects to Main Domain (${redirects.length})</div>
                 <div class="service-description">
-                    <em>These subdomains redirect to the main domain and serve the same content:</em><br>
+                    <em>These ${redirects.length} subdomain${redirects.length > 1 ? 's' : ''} redirect to the main domain and serve the same content:</em><br>
                     <div class="redirect-links">${redirectLinks}</div>
                 </div>
             </div>
