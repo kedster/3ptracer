@@ -44,7 +44,7 @@ class UIRenderer {
         this.displaySecurity(securityResults);
         this.displayInterestingFindings(interestingFindings);
         this.displayRedirectsToMain(processedData.redirectsToMain);
-        this.displayCNAMEMappings(processedData.subdomains);
+        this.displayCNAMEMappings(processedData);
         this.displayDNSRecords(processedData.dnsRecords);
         this.displaySubdomains(processedData);
         this.displayHistoricalRecords(processedData.historicalRecords);
@@ -515,9 +515,8 @@ class UIRenderer {
         
         let html = `
             <div class="service-item" style="border-left: 4px solid #28a745;">
-                <div class="service-name">🔄 Subdomain Redirects to Main Domain (${redirects.length})</div>
                 <div class="service-description">
-                    <em>These subdomains redirect to the main domain and serve the same content:</em><br>
+                    <em>These ${redirects.length} subdomain${redirects.length > 1 ? 's' : ''} redirect to the main domain and serve the same content:</em><br>
                     <div class="redirect-links">${redirectLinks}</div>
                 </div>
             </div>
@@ -528,15 +527,14 @@ class UIRenderer {
     }
 
     // Display CNAME mappings
-    displayCNAMEMappings(subdomainsMap) {
+    displayCNAMEMappings(processedData) {
         const container = document.getElementById('cnameMappings');
         const section = container?.closest('.service-category');
         if (!container) return;
         
-        // Get unclassified CNAME subdomains
-        const cnameSubdomains = Array.from(subdomainsMap.values()).filter(subdomain =>
-            this.hasSignificantCNAME(subdomain)
-        );
+        // Get properly filtered CNAME mappings from data processor
+        const cnameSubdomains = processedData.dataProcessor ? 
+            processedData.dataProcessor.getCNAMEMappings() : [];
         
         if (cnameSubdomains.length === 0) {
             if (section) section.style.display = 'none';
