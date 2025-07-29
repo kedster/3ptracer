@@ -198,7 +198,15 @@ class AnalysisController {
             console.warn(`⚠️ Subdomain discovery error:`, error.message);
             this.addAPINotification('Subdomain Discovery', `Warning: ${error.message}. Continuing with available data.`, 'warning');
             
-            // Continue with empty array if discovery fails
+            // FIXED: Return processed subdomain results even when discovery times out
+            const processedResults = this.dnsAnalyzer.getProcessedSubdomainResults();
+            if (processedResults.length > 0) {
+                console.log(`✅ Returning ${processedResults.length} processed subdomain results despite timeout`);
+                this.addAPINotification('Subdomain Discovery', `Found ${processedResults.length} subdomains that were processed before timeout`, 'success');
+                return processedResults.map(result => result.subdomain);
+            }
+            
+            // Continue with empty array if no processed results available
             return [];
         }
     }
@@ -220,6 +228,15 @@ class AnalysisController {
         
         if (subdomains.length === 0) {
             console.log(`ℹ️ No subdomains to analyze`);
+            
+            // FIXED: Check if we have processed results available
+            const processedResults = this.dnsAnalyzer.getProcessedSubdomainResults();
+            if (processedResults.length > 0) {
+                console.log(`✅ Found ${processedResults.length} processed subdomain results, using those instead`);
+                this.addAPINotification('DNS Analysis', `Using ${processedResults.length} previously processed subdomains`, 'info');
+                return processedResults;
+            }
+            
             return [];
         }
 

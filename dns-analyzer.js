@@ -6,64 +6,70 @@ class DNSAnalyzer {
             'https://dns.google/resolve',
             'https://cloudflare-dns.com/dns-query'
         ];
-
-        // Remove problematic backup servers that consistently fail
-        this.standbyDNSServers = [];
-
-        this.rateLimiter = new RateLimiter(10, 1000); // 10 requests per second
         
-        // Cache for certificate transparency results
-        this.ctCache = new Map();
+        // Fallback DNS servers (less reliable, used only if primary fails)
+        this.fallbackDNSServers = [
+            'https://doh.powerdns.org/dns-query',
+            'https://dns.alidns.com/resolve'
+        ];
         
-        // Global subdomain tracking for real-time processing
-        this.globalSubdomains = new Set();
+        // Statistics
+        this.stats = {
+            dnsQueries: 0,
+            apiCalls: 0,
+            subdomainsAnalyzed: 0,
+            subdomainsDiscovered: 0,
+            asnLookups: 0,
+            servicesDetected: 0,
+            takeoversDetected: 0,
+            errors: 0,
+            startTime: null
+        };
+        
+        // Track processed subdomains to avoid duplicates
         this.processedSubdomains = new Set();
-        this.subdomainCallbacks = [];
-        this.notificationCallback = null;
+        
+        // FIXED: Store processed subdomain results
+        this.processedSubdomainResults = new Map();
         
         // Historical records tracking
         this.historicalRecords = [];
         
-        // Current domain being analyzed (for intelligent record querying)
-        this.currentDomain = '';
+        // Callbacks for real-time notifications
+        this.subdomainCallbacks = [];
+        this.apiCallbacks = [];
         
-        // Statistics tracking
-        this.stats = {
-            dnsQueries: 0,
-            apiCalls: 0,
-            subdomainsDiscovered: 0,
-            subdomainsAnalyzed: 0,
-            asnLookups: 0,
-            servicesDetected: 0,
-            takeoversDetected: 0,
-            startTime: null,
-            endTime: null
-        };
+        // Rate limiting
+        this.rateLimiter = new RateLimiter(10, 1000); // 10 requests per second
+        
+        // Current domain being analyzed
+        this.currentDomain = null;
+        
+        // Service detection engine
+        this.serviceDetector = new ServiceDetectionEngine();
     }
 
-    // Reset all internal state for new analysis
+    // Reset all statistics and internal state
     resetStats() {
-        // Reset statistics
         this.stats = {
             dnsQueries: 0,
             apiCalls: 0,
-            subdomainsDiscovered: 0,
             subdomainsAnalyzed: 0,
+            subdomainsDiscovered: 0,
             asnLookups: 0,
             servicesDetected: 0,
             takeoversDetected: 0,
-            startTime: Date.now(),
-            endTime: null
+            errors: 0,
+            startTime: Date.now()
         };
         
         // Clear all internal arrays and sets
-        this.globalSubdomains.clear();
         this.processedSubdomains.clear();
+        this.processedSubdomainResults.clear();
+        this.historicalRecords = []; // Clear historical records
         this.subdomainCallbacks = [];
-        this.notificationCallback = null;
-        this.historicalRecords = [];
-        this.ctCache.clear();
-        this.currentDomain = '';
+        this.apiCallbacks = [];
+        this.currentDomain = null;
         
         console.log('🧹 DNS Analyzer internal state cleared for new analysis');
     }
@@ -75,8 +81,7 @@ class DNSAnalyzer {
 
     // Print final statistics
     printStats() {
-        this.stats.endTime = Date.now();
-        const duration = (this.stats.endTime - this.stats.startTime) / 1000;
+        const duration = (Date.now() - this.stats.startTime) / 1000;
         
         console.log('\n' + '='.repeat(60));
         console.log('📊 ANALYSIS STATISTICS');
@@ -100,12 +105,12 @@ class DNSAnalyzer {
 
     // Register callback for API notifications
     onAPINotification(callback) {
-        this.notificationCallback = callback;
+        this.apiCallbacks.push(callback);
     }
 
     // Notify all callbacks about new subdomain
     notifySubdomainDiscovered(subdomain, source) {
-        this.globalSubdomains.add(subdomain);
+        this.processedSubdomains.add(subdomain);
         this.stats.subdomainsDiscovered++;
         console.log(`🆕 New subdomain discovered: ${subdomain} (from ${source})`);
         
@@ -121,15 +126,24 @@ class DNSAnalyzer {
 
     // Send API notification
     notifyAPIStatus(apiName, status, message) {
-        if (this.notificationCallback) {
+        this.apiCallbacks.forEach(callback => {
             try {
-                this.notificationCallback(apiName, status, message);
+                callback(apiName, status, message);
             } catch (error) {
                 console.warn('API notification callback error:', error);
             }
-        }
+        });
     }
     
+    // Get processed subdomain results
+    getProcessedSubdomainResults() {
+        const results = [];
+        for (const [subdomain, result] of this.processedSubdomainResults) {
+            results.push(result);
+        }
+        return results;
+    }
+
     // Get historical records
     getHistoricalRecords() {
         return this.historicalRecords;
@@ -171,6 +185,9 @@ class DNSAnalyzer {
                     analysis.redirectTarget = cnameTarget;
                     console.log(`🔄 Redirect detected: ${subdomain} → ${cnameTarget} (main domain) - skipping detailed analysis`);
                     
+                    // Store the result
+                    this.processedSubdomainResults.set(subdomain, analysis);
+                    
                     // Notify about redirect completion
                     this.subdomainCallbacks.forEach(callback => {
                         try {
@@ -184,36 +201,40 @@ class DNSAnalyzer {
             }
             
             // Check if this is a historical record (no DNS records found)
-            if ((!analysis.records.A || analysis.records.A.length === 0) && 
-                (!analysis.records.CNAME || analysis.records.CNAME.length === 0)) {
-                
-                // This is a historical record - no active DNS
-                const historicalRecord = {
-                    subdomain: subdomain,
-                    source: source,
-                    certificateInfo: certInfo || {
-                        issuer: 'No certificate info available',
-                        notBefore: null,
-                        notAfter: null,
-                        certificateId: null
-                    },
-                    discoveredAt: new Date().toISOString(),
-                    status: 'Historical/Obsolete'
-                };
-                this.historicalRecords.push(historicalRecord);
-                console.log(`📜 Historical record found: ${subdomain} (no active DNS, source: ${source})`);
+            if (!analysis.records || Object.keys(analysis.records).length === 0) {
+                console.log(`📜 Historical record detected: ${subdomain} (no active DNS records)`);
+                analysis.isHistorical = true;
+                analysis.status = 'historical';
+            } else {
+                // This is an active subdomain with DNS records
+                console.log(`✅ Active subdomain detected: ${subdomain} with ${Object.keys(analysis.records).length} record types`);
+                analysis.status = 'active';
             }
             
-            // Notify about analysis completion
+            // Store the result
+            this.processedSubdomainResults.set(subdomain, analysis);
+            
+            // Notify about completion
             this.subdomainCallbacks.forEach(callback => {
                 try {
                     callback(subdomain, source, analysis);
                 } catch (error) {
-                    console.warn('Analysis callback error:', error);
+                    console.warn('Subdomain callback error:', error);
                 }
             });
+            
         } catch (error) {
-            console.error(`❌ Error processing subdomain ${subdomain}:`, error);
+            console.warn(`❌ Failed to process subdomain ${subdomain}:`, error.message);
+            
+            // Store error result
+            const errorResult = {
+                subdomain: subdomain,
+                records: {},
+                ip: null,
+                status: 'error',
+                error: error.message
+            };
+            this.processedSubdomainResults.set(subdomain, errorResult);
         }
     }
 
