@@ -113,6 +113,16 @@ class ServiceDetectionEngine {
                     cnamePatterns: ['ondigitalocean.app'],
                     description: 'Cloud infrastructure platform'
                 },
+                'Linode': {
+                    patterns: ['linode.com', 'linodeobjects.com'],
+                    cnamePatterns: ['linode.com'],
+                    description: 'Cloud infrastructure platform'
+                },
+                'Hetzner': {
+                    patterns: ['hetzner.cloud', 'hetzner.com'],
+                    cnamePatterns: ['hetzner.cloud'],
+                    description: 'Cloud infrastructure platform'
+                },
                 'GitHub Pages': {
                     patterns: ['github.io'],
                     cnamePatterns: ['github.io'],
@@ -221,6 +231,11 @@ class ServiceDetectionEngine {
             this.processDMARCRecords(records.DMARC, detectedServices, domainBeingAnalyzed);
         }
 
+        // Process DKIM records to detect third-party email services
+        if (records.DKIM && domainBeingAnalyzed) {
+            this.processDKIMRecords(records.DKIM, detectedServices, domainBeingAnalyzed);
+        }
+
         // Note: DMARC and SPF policy records are now handled separately as DNS records
 
         return Array.from(detectedServices.values());
@@ -270,27 +285,43 @@ class ServiceDetectionEngine {
             }
         }
 
-        // Process other important TXT records (excluding SPF and DMARC)
+        // Process DKIM records
+        if (records.DKIM) {
+            for (const record of records.DKIM) {
+                const dkimInfo = record.parsedInfo || {};
+                const serviceName = dkimInfo.possibleService ? 
+                    dkimInfo.possibleService.name : 'Unknown Email Service';
+                
+                dnsRecords.push({
+                    type: 'DKIM',
+                    name: 'DomainKeys Identified Mail',
+                    description: `Email authentication via cryptographic signatures (Selector: ${record.selector})`,
+                    data: record.data,
+                    record: record,
+                    category: 'email-security',
+                    parsed: {
+                        selector: record.selector,
+                        service: serviceName,
+                        keyType: dkimInfo.keyType || 'RSA',
+                        confidence: dkimInfo.possibleService?.confidence || 'unknown',
+                        publicKeyPreview: dkimInfo.publicKey || 'Not found'
+                    }
+                });
+            }
+        }
+
+        // Process other important TXT records (excluding SPF, DMARC, and DKIM)
         if (records.TXT) {
             for (const record of records.TXT) {
                 const txtData = record.data.toLowerCase();
                 
-                // Skip SPF and DMARC records (already processed above)
-                if (txtData.includes('v=spf1') || txtData.includes('v=dmarc1')) {
+                // Skip SPF, DMARC, and DKIM records (already processed above)
+                if (txtData.includes('v=spf1') || txtData.includes('v=dmarc1') || txtData.includes('v=dkim1')) {
                     continue;
                 }
                 
                 // Look for other important DNS records
-                if (txtData.includes('v=dkim1')) {
-                    dnsRecords.push({
-                        type: 'DKIM',
-                        name: 'DomainKeys Identified Mail',
-                        description: 'Email authentication using cryptographic signatures',
-                        data: record.data,
-                        record: record,
-                        category: 'email-security'
-                    });
-                } else if (txtData.includes('_domainkey')) {
+                if (txtData.includes('_domainkey')) {
                     dnsRecords.push({
                         type: 'DKIM-Key',
                         name: 'DKIM Public Key',
@@ -304,6 +335,69 @@ class ServiceDetectionEngine {
         }
 
         return dnsRecords;
+    }
+
+    // Process DKIM records to detect third-party email services
+    processDKIMRecords(dkimRecords, detectedServices, domainBeingAnalyzed) {
+        console.log(`🔍 Processing ${dkimRecords.length} DKIM records for domain: ${domainBeingAnalyzed}`);
+        
+        for (const record of dkimRecords) {
+            const dkimInfo = record.parsedInfo || {};
+            const possibleService = dkimInfo.possibleService;
+            
+            console.log(`📧 Checking DKIM record with selector '${record.selector}':`, possibleService);
+            
+            if (possibleService) {
+                // This DKIM record indicates a third-party email service
+                const serviceName = `${possibleService.name} (Email Service)`;
+                const isHighConfidence = possibleService.confidence === 'high';
+                const serviceDescription = isHighConfidence ? 
+                    `Confirmed third-party email service - DKIM selector indicates ${possibleService.name}` :
+                    `Possible third-party email service - DKIM selector suggests ${possibleService.name}`;
+                
+                console.log(`🚨 Found third-party email service: ${serviceName} (confidence: ${possibleService.confidence})`);
+                
+                this.addOrUpdateService(
+                    detectedServices, 
+                    serviceName, 
+                    {
+                        description: serviceDescription,
+                        selector: record.selector,
+                        keyType: dkimInfo.keyType || 'RSA',
+                        confidence: possibleService.confidence,
+                        isThirdParty: true,
+                        isEmailService: true,
+                        securityImplication: 'Email authentication handled by external service'
+                    }, 
+                    'email', 
+                    record, 
+                    'DKIM'
+                );
+            } else {
+                // Unknown DKIM selector - could be custom or unrecognized service
+                const serviceName = `Unknown Email Service (${record.selector})`;
+                const serviceDescription = `DKIM record found with unrecognized selector - could indicate custom email setup or unknown third-party service`;
+                
+                console.log(`⚠️ Found unrecognized DKIM selector: ${record.selector}`);
+                
+                this.addOrUpdateService(
+                    detectedServices, 
+                    serviceName, 
+                    {
+                        description: serviceDescription,
+                        selector: record.selector,
+                        keyType: dkimInfo.keyType || 'RSA',
+                        confidence: 'unknown',
+                        isThirdParty: false, // Don't flag as third-party unless we know for sure
+                        isEmailService: true,
+                        securityImplication: 'Custom or unrecognized email authentication setup'
+                    }, 
+                    'email', 
+                    record, 
+                    'DKIM'
+                );
+            }
+        }
     }
 
     // Process a specific record type against patterns
@@ -451,11 +545,20 @@ class ServiceDetectionEngine {
             console.log(`🔍 Checking email: ${email}, domain: ${emailDomain}, analyzing: ${domainBeingAnalyzed}`);
             
             if (emailDomain && emailDomain !== domainBeingAnalyzed) {
-                // This is a third-party DMARC reporting service
-                const serviceName = this.identifyDMARCReportingService(emailDomain);
-                const serviceDescription = `DMARC ${type} reporting service`;
+                // ANY external domain is a third-party dependency - flag it prominently
+                const knownServiceName = this.identifyKnownDMARCService(emailDomain);
+                const isKnownService = knownServiceName !== null;
                 
-                console.log(`✅ Found third-party DMARC service: ${serviceName} (${email})`);
+                // Create clear service name that emphasizes third-party nature
+                const serviceName = isKnownService 
+                    ? `${knownServiceName} (3rd Party DMARC)` 
+                    : `Third-Party DMARC Service (${emailDomain})`;
+                
+                const serviceDescription = isKnownService
+                    ? `Known DMARC ${type} reporting service - External dependency`
+                    : `Unknown DMARC ${type} reporting service - EXTERNAL DEPENDENCY ALERT`;
+                
+                console.log(`🚨 Found third-party DMARC dependency: ${serviceName} (${email})`);
                 
                 this.addOrUpdateService(
                     detectedServices, 
@@ -464,20 +567,23 @@ class ServiceDetectionEngine {
                         description: serviceDescription,
                         reportingEmail: email,
                         reportingType: type,
-                        domain: emailDomain
+                        domain: emailDomain,
+                        isThirdParty: true,
+                        isKnownService: isKnownService,
+                        securityImplication: 'Email authentication reports sent to external service'
                     }, 
                     'security', 
                     record, 
                     'DMARC'
                 );
             } else {
-                console.log(`ℹ️ Skipping internal email: ${email} (same domain as ${domainBeingAnalyzed})`);
+                console.log(`ℹ️ Internal email found: ${email} (same domain as ${domainBeingAnalyzed})`);
             }
         });
     }
 
-    // Identify known DMARC reporting services by domain
-    identifyDMARCReportingService(domain) {
+    // Identify known DMARC reporting services by domain (returns null if unknown)
+    identifyKnownDMARCService(domain) {
         const dmarcServices = {
             'dmarcian.com': 'Dmarcian',
             'valimail.com': 'Valimail',
@@ -506,41 +612,65 @@ class ServiceDetectionEngine {
             }
         }
         
-        // If not recognized, create a generic name based on domain
-        const domainParts = domain.split('.');
-        const mainDomain = domainParts.length >= 2 ? 
-            domainParts[domainParts.length - 2] : domain;
-        
-        return `${mainDomain.charAt(0).toUpperCase() + mainDomain.slice(1)} DMARC Service`;
+        // Return null for unknown services (don't create generic names)
+        return null;
     }
 
-    // Classify vendor from ASN information
+    // Enhanced ASN-based vendor classification
     classifyVendor(asnInfo) {
         if (!asnInfo || !asnInfo.asn) {
-            return { vendor: 'Unknown', category: 'Unknown' };
+            return { vendor: 'Unknown', category: 'infrastructure' };
         }
-
+        
         const asn = asnInfo.asn.toLowerCase();
         
-        for (const [vendor, pattern] of Object.entries(this.vendorPatterns)) {
-            if (pattern.test(asn)) {
-                return {
-                    vendor: vendor,
-                    asn: asnInfo.asn,
-                    location: asnInfo.location,
-                    city: asnInfo.city,
-                    category: 'infrastructure'
-                };
-            }
+        // Check for known cloud providers
+        if (asn.includes('amazon') || asn.includes('aws')) {
+            return { 
+                vendor: 'Amazon AWS', 
+                category: 'cloud',
+                asn: asnInfo.asn,
+                location: asnInfo.location,
+                city: asnInfo.city,
+                isp: asnInfo.isp
+            };
+        } else if (asn.includes('digitalocean')) {
+            return { 
+                vendor: 'DigitalOcean', 
+                category: 'cloud',
+                asn: asnInfo.asn,
+                location: asnInfo.location,
+                city: asnInfo.city,
+                isp: asnInfo.isp
+            };
+        } else if (asn.includes('linode')) {
+            return { 
+                vendor: 'Linode', 
+                category: 'cloud',
+                asn: asnInfo.asn,
+                location: asnInfo.location,
+                city: asnInfo.city,
+                isp: asnInfo.isp
+            };
+        } else if (asn.includes('hetzner')) {
+            return { 
+                vendor: 'Hetzner', 
+                category: 'cloud',
+                asn: asnInfo.asn,
+                location: asnInfo.location,
+                city: asnInfo.city,
+                isp: asnInfo.isp
+            };
+        } else {
+            return { 
+                vendor: asnInfo.asn || 'Unknown',
+                category: 'infrastructure',
+                asn: asnInfo.asn,
+                location: asnInfo.location,
+                city: asnInfo.city,
+                isp: asnInfo.isp
+            };
         }
-
-        return {
-            vendor: asnInfo.asn || 'Unknown',
-            asn: asnInfo.asn,
-            location: asnInfo.location,
-            city: asnInfo.city,
-            category: 'infrastructure'
-        };
     }
 
     // Security analysis methods

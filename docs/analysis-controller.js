@@ -85,6 +85,23 @@ class AnalysisController {
             this.uiRenderer.updateProgress(100, 'Analysis complete!');
             this.displayResults(processedData, securityResults);
             
+            // Enable export functionality with enhanced data
+            console.log('🔍 Checking export manager availability:', !!window.exportManager);
+            if (window.exportManager) {
+                console.log('📊 Setting analysis data for export...');
+                
+                // Add dataProcessor reference to processedData for export (same as UIRenderer)
+                const enhancedProcessedData = {
+                    ...processedData,
+                    dataProcessor: this.dataProcessor
+                };
+                
+                window.exportManager.setAnalysisData(enhancedProcessedData, securityResults, domain);
+                console.log('✅ Export data set successfully');
+            } else {
+                console.error('❌ Export manager not available');
+            }
+            
             console.log(`🎉 Analysis complete for ${domain}!`);
             this.debug.logStats(processedData.stats);
             
@@ -239,14 +256,18 @@ class AnalysisController {
                     const asnInfo = await this.dnsAnalyzer.getASNInfo(subdomain.ip);
                     if (asnInfo && typeof asnInfo === 'object') {
                         subdomain.vendor = this.serviceDetector.classifyVendor(asnInfo);
+                        // FIXED: Store the raw ASN info for sovereignty analysis
+                        subdomain.asnInfo = asnInfo;
                         this.debug.log(`ASN info for ${subdomain.ip}: ${asnInfo.asn || 'Unknown'}`);
                     } else {
                         console.warn(`⚠️ Invalid ASN response for ${subdomain.ip}`);
                         subdomain.vendor = { vendor: 'Unknown', category: 'Unknown' };
+                        subdomain.asnInfo = null;
                     }
                 } catch (error) {
                     console.warn(`⚠️ ASN lookup failed for ${subdomain.ip}:`, error.message);
                     subdomain.vendor = { vendor: 'Unknown', category: 'Unknown' };
+                    subdomain.asnInfo = null;
                 }
             }
         }
@@ -313,8 +334,13 @@ class AnalysisController {
             securityResults?.dnsRecords || []
         );
         
+        // NEW: Add Data Sovereignty Analysis
+        console.log(`🌍 Running data sovereignty analysis...`);
+        const sovereigntyData = this.dataProcessor.analyzeSovereignty();
+        processedData.sovereigntyAnalysis = sovereigntyData;
+        
         this.debug.logJSON('Processed data:', processedData);
-        console.log(`✅ Data processing complete`);
+        console.log(`✅ Data processing complete with sovereignty analysis`);
         
         return processedData;
     }

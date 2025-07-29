@@ -342,6 +342,10 @@ class DNSAnalyzer {
             return { vendor: 'Cloudflare', category: 'CDN' };
         } else if (org.includes('digitalocean')) {
             return { vendor: 'DigitalOcean', category: 'Cloud' };
+        } else if (org.includes('linode')) {
+            return { vendor: 'Linode', category: 'Cloud' };
+        } else if (org.includes('hetzner')) {
+            return { vendor: 'Hetzner', category: 'Cloud' };
         } else if (org.includes('fastly')) {
             return { vendor: 'Fastly', category: 'CDN' };
         } else {
@@ -408,6 +412,8 @@ class DNSAnalyzer {
             { pattern: 'cloudflare', name: 'Cloudflare', category: 'cloud', description: 'CDN and security services' },
             { pattern: 'cloudfront.net', name: 'AWS CloudFront', category: 'cloud', description: 'Amazon content delivery network' },
             { pattern: 'elb.amazonaws.com', name: 'AWS Load Balancer', category: 'cloud', description: 'Amazon load balancing service' },
+            { pattern: 'awsglobalaccelerator.com', name: 'AWS Global Accelerator', category: 'cloud', description: 'Global application accelerator' },
+            { pattern: 'awsapprunner.com', name: 'AWS App Runner', category: 'cloud', description: 'Containerized application hosting' },
             { pattern: 'amazonaws.com', name: 'Amazon AWS', category: 'cloud', description: 'Cloud computing platform' },
             { pattern: 'fastly.com', name: 'Fastly', category: 'cloud', description: 'Edge cloud platform' },
             
@@ -418,6 +424,8 @@ class DNSAnalyzer {
             { pattern: 'github', name: 'GitHub Pages', category: 'cloud', description: 'Static site hosting' },
             { pattern: 'wixdns.net', name: 'Wix', category: 'cloud', description: 'Website builder platform' },
             { pattern: 'wix.com', name: 'Wix', category: 'cloud', description: 'Website builder platform' },
+            { pattern: 'azurewebsites.net', name: 'Microsoft Azure App Service', category: 'cloud', description: 'Azure web application hosting' },
+            { pattern: 'ondigitalocean.app', name: 'DigitalOcean App Platform', category: 'cloud', description: 'Application hosting platform' },
             
             // Documentation & Content
             { pattern: 'gitbook.io', name: 'GitBook', category: 'documentation', description: 'Documentation platform' },
@@ -703,6 +711,16 @@ class DNSAnalyzer {
             }
         } catch (error) {
             console.warn('Failed to query DMARC records:', error);
+        }
+
+        // Query DKIM records using common selectors
+        try {
+            const dkimRecords = await this.queryDKIMRecords(domain);
+            if (dkimRecords.length > 0) {
+                results.records['DKIM'] = dkimRecords;
+            }
+        } catch (error) {
+            console.warn('Failed to query DKIM records:', error);
         }
 
         return results;
@@ -1094,7 +1112,251 @@ class DNSAnalyzer {
         return results;
     }
 
-    // Get ASN information for IP with multiple fallback sources
+    // Query DKIM records using common selectors
+    async queryDKIMRecords(domain) {
+        const dkimRecords = [];
+        
+        // Common DKIM selectors used by various email services
+        const commonSelectors = [
+            // Generic/Default selectors
+            'default', 'selector1', 'selector2', 'dkim', 'key1', 'key2', 's1', 's2',
+            
+            // Google Workspace / Gmail
+            'google', '20161025', '20210112',
+            
+            // Microsoft Office 365 / Outlook
+            'selector1', 'selector2', 'sig1', 'sig2',
+            
+            // SendGrid
+            's1', 's2', 'em1', 'em2', 'em3', 'em4', 'em5', 'em6', 'em7', 'em8', 'em9', 'em10',
+            'emshared1', 'emshared2', 'emshared3',
+            
+            // Mailchimp
+            'k1', 'k2', 'k3', 'mc1', 'mc2', 'mc3',
+            
+            // Amazon SES
+            'amazonses', 'ses', 'aws-ses',
+            
+            // Mandrill (Mailchimp Transactional)
+            'mandrill', 'mte1', 'mte2',
+            
+            // Postmark
+            'pm', 'postmark', 'pm1', 'pm2',
+            
+            // SparkPost / MessageSystems
+            'sp', 'sparkpost', 'scph0316', 'scph0817',
+            
+            // Constant Contact
+            'constantcontact', 'cc1', 'cc2',
+            
+            // Campaign Monitor
+            'cm', 'campaignmonitor', 'cm1', 'cm2',
+            
+            // Zendesk
+            'zendesk1', 'zendesk2', 'zendeskverification',
+            
+            // HubSpot
+            'hs1-', 'hs2-', 'hsdomainkey1', 'hsdomainkey2',
+            
+            // Salesforce / ExactTarget
+            'et', 'sf', 'exacttarget', 'sfmc1', 'sfmc2',
+            
+            // MailGun
+            'mg', 'mailgun', 'mg1', 'mg2',
+            
+            // Klaviyo
+            'dkim', 'klaviyo1', 'klaviyo2',
+            
+            // ConvertKit
+            'ck', 'convertkit', 'ck1', 'ck2'
+        ];
+
+        console.log(`🔍 Querying DKIM records for ${domain} using ${commonSelectors.length} common selectors...`);
+        
+        // Try each selector
+        for (const selector of commonSelectors) {
+            try {
+                const dkimSubdomain = `${selector}._domainkey.${domain}`;
+                console.log(`  📡 Checking DKIM selector: ${dkimSubdomain}`);
+                
+                const records = await this.queryDNS(dkimSubdomain, 'TXT');
+                if (records && records.length > 0) {
+                    for (const record of records) {
+                        // Check if this is a valid DKIM record
+                        if (this.isDKIMRecord(record.data)) {
+                            const dkimInfo = {
+                                ...record,
+                                selector: selector,
+                                subdomain: dkimSubdomain,
+                                parsedInfo: this.parseDKIMRecord(record.data, selector)
+                            };
+                            
+                            dkimRecords.push(dkimInfo);
+                            console.log(`  ✅ Found DKIM record with selector '${selector}':`, dkimInfo.parsedInfo);
+                        }
+                    }
+                }
+            } catch (error) {
+                // Silently continue - most selectors won't exist
+                console.log(`    ⚠️  Selector '${selector}' not found (normal)`);
+            }
+        }
+        
+        console.log(`📊 Found ${dkimRecords.length} DKIM records for ${domain}`);
+        return dkimRecords;
+    }
+
+    // Check if a TXT record is a valid DKIM record
+    isDKIMRecord(data) {
+        const lowerData = data.toLowerCase();
+        return lowerData.includes('v=dkim1') || 
+               lowerData.includes('k=rsa') || 
+               lowerData.includes('p=') ||
+               (lowerData.includes('v=') && lowerData.includes('p='));
+    }
+
+    // Parse DKIM record and extract useful information
+    parseDKIMRecord(data, selector) {
+        const info = {
+            selector: selector,
+            version: null,
+            keyType: null,
+            publicKey: null,
+            service: null,
+            flags: null,
+            notes: null,
+            possibleService: null
+        };
+
+        // Extract version
+        const versionMatch = data.match(/v=([^;]+)/i);
+        if (versionMatch) info.version = versionMatch[1];
+
+        // Extract key type
+        const keyTypeMatch = data.match(/k=([^;]+)/i);
+        if (keyTypeMatch) info.keyType = keyTypeMatch[1];
+
+        // Extract public key (truncated for display)
+        const publicKeyMatch = data.match(/p=([^;]+)/i);
+        if (publicKeyMatch) {
+            const fullKey = publicKeyMatch[1];
+            info.publicKey = fullKey.length > 50 ? fullKey.substring(0, 50) + '...' : fullKey;
+        }
+
+        // Extract service type
+        const serviceMatch = data.match(/s=([^;]+)/i);
+        if (serviceMatch) info.service = serviceMatch[1];
+
+        // Extract flags
+        const flagsMatch = data.match(/t=([^;]+)/i);
+        if (flagsMatch) info.flags = flagsMatch[1];
+
+        // Extract notes
+        const notesMatch = data.match(/n=([^;]+)/i);
+        if (notesMatch) info.notes = notesMatch[1];
+
+        // Identify possible email service based on selector
+        info.possibleService = this.identifyEmailServiceFromSelector(selector);
+
+        return info;
+    }
+
+    // Identify email service based on DKIM selector patterns
+    identifyEmailServiceFromSelector(selector) {
+        const lowerSelector = selector.toLowerCase();
+        
+        // Google Workspace / Gmail patterns
+        if (lowerSelector.includes('google') || 
+            /^\d{8}$/.test(lowerSelector) || // 8-digit dates like 20161025
+            lowerSelector === 'default') {
+            return { name: 'Google Workspace', category: 'email-service', confidence: 'medium' };
+        }
+        
+        // Microsoft Office 365 patterns
+        if (lowerSelector.includes('selector') || 
+            lowerSelector.includes('sig')) {
+            return { name: 'Microsoft Office 365', category: 'email-service', confidence: 'low' };
+        }
+        
+        // SendGrid patterns
+        if (lowerSelector.startsWith('s') && /^s\d+$/.test(lowerSelector) ||
+            lowerSelector.startsWith('em') ||
+            lowerSelector.includes('emshared')) {
+            return { name: 'SendGrid', category: 'email-service', confidence: 'high' };
+        }
+        
+        // Mailchimp patterns
+        if (lowerSelector.startsWith('k') && /^k\d+$/.test(lowerSelector) ||
+            lowerSelector.startsWith('mc')) {
+            return { name: 'Mailchimp', category: 'email-service', confidence: 'high' };
+        }
+        
+        // Amazon SES patterns
+        if (lowerSelector.includes('amazonses') || 
+            lowerSelector.includes('ses') ||
+            lowerSelector.includes('aws-ses')) {
+            return { name: 'Amazon SES', category: 'email-service', confidence: 'high' };
+        }
+        
+        // Mandrill patterns
+        if (lowerSelector.includes('mandrill') || 
+            lowerSelector.startsWith('mte')) {
+            return { name: 'Mandrill (Mailchimp Transactional)', category: 'email-service', confidence: 'high' };
+        }
+        
+        // Postmark patterns
+        if (lowerSelector.includes('postmark') || 
+            lowerSelector.startsWith('pm')) {
+            return { name: 'Postmark', category: 'email-service', confidence: 'high' };
+        }
+        
+        // SparkPost patterns
+        if (lowerSelector.includes('sparkpost') || 
+            lowerSelector.startsWith('sp') ||
+            lowerSelector.includes('scph')) {
+            return { name: 'SparkPost', category: 'email-service', confidence: 'high' };
+        }
+        
+        // HubSpot patterns
+        if (lowerSelector.includes('hs') || 
+            lowerSelector.includes('hubspot')) {
+            return { name: 'HubSpot', category: 'email-service', confidence: 'high' };
+        }
+        
+        // Salesforce patterns
+        if (lowerSelector.includes('exacttarget') || 
+            lowerSelector.includes('sfmc') ||
+            lowerSelector.startsWith('et') ||
+            lowerSelector.startsWith('sf')) {
+            return { name: 'Salesforce Marketing Cloud', category: 'email-service', confidence: 'medium' };
+        }
+        
+        // MailGun patterns
+        if (lowerSelector.includes('mailgun') || 
+            lowerSelector.startsWith('mg')) {
+            return { name: 'Mailgun', category: 'email-service', confidence: 'high' };
+        }
+        
+        // Klaviyo patterns
+        if (lowerSelector.includes('klaviyo')) {
+            return { name: 'Klaviyo', category: 'email-service', confidence: 'high' };
+        }
+        
+        // ConvertKit patterns
+        if (lowerSelector.includes('convertkit') || 
+            lowerSelector.startsWith('ck')) {
+            return { name: 'ConvertKit', category: 'email-service', confidence: 'medium' };
+        }
+        
+        // Zendesk patterns
+        if (lowerSelector.includes('zendesk')) {
+            return { name: 'Zendesk', category: 'email-service', confidence: 'high' };
+        }
+        
+        return null;
+    }
+
+    // Get ASN information for IP with multiple fallback sources - Enhanced for Data Sovereignty Analysis
     async getASNInfo(ip) {
         const providers = [
             {
@@ -1104,17 +1366,31 @@ class DNSAnalyzer {
                     asn: data.org || 'Unknown',
                     isp: data.org || 'Unknown',
                     location: data.country || 'Unknown',
-                    city: data.city || 'Unknown'
+                    city: data.city || 'Unknown',
+                    // Enhanced data sovereignty fields
+                    country: data.country || 'Unknown',
+                    countryName: this.getCountryName(data.country) || 'Unknown',
+                    region: data.region || 'Unknown',
+                    timezone: data.timezone || 'Unknown',
+                    coordinates: data.loc ? data.loc.split(',') : null,
+                    postal: data.postal || 'Unknown'
                 })
             },
             {
                 name: 'ip-api.com',
-                url: `http://ip-api.com/json/${ip}`,
+                url: `http://ip-api.com/json/${ip}?fields=status,message,country,countryCode,region,regionName,city,zip,lat,lon,timezone,isp,org,as,query`,
                 transform: (data) => ({
                     asn: data.as || 'Unknown',
                     isp: data.isp || 'Unknown',
                     location: data.countryCode || 'Unknown',
-                    city: data.city || 'Unknown'
+                    city: data.city || 'Unknown',
+                    // Enhanced data sovereignty fields
+                    country: data.countryCode || 'Unknown',
+                    countryName: data.country || 'Unknown',
+                    region: data.regionName || 'Unknown',
+                    timezone: data.timezone || 'Unknown',
+                    coordinates: (data.lat && data.lon) ? [data.lat, data.lon] : null,
+                    postal: data.zip || 'Unknown'
                 })
             },
             {
@@ -1124,7 +1400,14 @@ class DNSAnalyzer {
                     asn: data.asn || 'Unknown',
                     isp: data.org || 'Unknown',
                     location: data.country_code || 'Unknown',
-                    city: data.city || 'Unknown'
+                    city: data.city || 'Unknown',
+                    // Enhanced data sovereignty fields
+                    country: data.country_code || 'Unknown',
+                    countryName: data.country_name || 'Unknown',
+                    region: data.region || 'Unknown',
+                    timezone: data.timezone || 'Unknown',
+                    coordinates: (data.latitude && data.longitude) ? [data.latitude, data.longitude] : null,
+                    postal: data.postal || 'Unknown'
                 })
             }
         ];
@@ -1164,8 +1447,163 @@ class DNSAnalyzer {
             asn: 'Unknown',
             isp: 'Unknown',
             location: 'Unknown',
-            city: 'Unknown'
+            city: 'Unknown',
+            country: 'Unknown',
+            countryName: 'Unknown',
+            region: 'Unknown',
+            timezone: 'Unknown',
+            coordinates: null,
+            postal: 'Unknown'
         };
+    }
+
+    // Helper method to get full country names from country codes
+    getCountryName(countryCode) {
+        const countryNames = {
+            'US': 'United States',
+            'CA': 'Canada',
+            'GB': 'United Kingdom',
+            'DE': 'Germany',
+            'FR': 'France',
+            'JP': 'Japan',
+            'AU': 'Australia',
+            'BR': 'Brazil',
+            'IN': 'India',
+            'CN': 'China',
+            'RU': 'Russia',
+            'NL': 'Netherlands',
+            'SG': 'Singapore',
+            'IE': 'Ireland',
+            'CH': 'Switzerland',
+            'SE': 'Sweden',
+            'NO': 'Norway',
+            'DK': 'Denmark',
+            'FI': 'Finland',
+            'IT': 'Italy',
+            'ES': 'Spain',
+            'BE': 'Belgium',
+            'AT': 'Austria',
+            'PL': 'Poland',
+            'CZ': 'Czech Republic',
+            'HU': 'Hungary',
+            'GR': 'Greece',
+            'PT': 'Portugal',
+            'RO': 'Romania',
+            'BG': 'Bulgaria',
+            'HR': 'Croatia',
+            'SI': 'Slovenia',
+            'SK': 'Slovakia',
+            'LT': 'Lithuania',
+            'LV': 'Latvia',
+            'EE': 'Estonia',
+            'LU': 'Luxembourg',
+            'MT': 'Malta',
+            'CY': 'Cyprus',
+            'MX': 'Mexico',
+            'AR': 'Argentina',
+            'CL': 'Chile',
+            'CO': 'Colombia',
+            'PE': 'Peru',
+            'VE': 'Venezuela',
+            'UY': 'Uruguay',
+            'PY': 'Paraguay',
+            'BO': 'Bolivia',
+            'EC': 'Ecuador',
+            'GY': 'Guyana',
+            'SR': 'Suriname',
+            'GF': 'French Guiana',
+            'FK': 'Falkland Islands',
+            'KR': 'South Korea',
+            'TW': 'Taiwan',
+            'HK': 'Hong Kong',
+            'MO': 'Macau',
+            'TH': 'Thailand',
+            'MY': 'Malaysia',
+            'ID': 'Indonesia',
+            'PH': 'Philippines',
+            'VN': 'Vietnam',
+            'LA': 'Laos',
+            'KH': 'Cambodia',
+            'MM': 'Myanmar',
+            'BD': 'Bangladesh',
+            'LK': 'Sri Lanka',
+            'NP': 'Nepal',
+            'BT': 'Bhutan',
+            'MV': 'Maldives',
+            'PK': 'Pakistan',
+            'AF': 'Afghanistan',
+            'IR': 'Iran',
+            'IQ': 'Iraq',
+            'SY': 'Syria',
+            'LB': 'Lebanon',
+            'JO': 'Jordan',
+            'IL': 'Israel',
+            'PS': 'Palestine',
+            'SA': 'Saudi Arabia',
+            'AE': 'United Arab Emirates',
+            'QA': 'Qatar',
+            'BH': 'Bahrain',
+            'KW': 'Kuwait',
+            'OM': 'Oman',
+            'YE': 'Yemen',
+            'EG': 'Egypt',
+            'LY': 'Libya',
+            'TN': 'Tunisia',
+            'DZ': 'Algeria',
+            'MA': 'Morocco',
+            'SD': 'Sudan',
+            'SS': 'South Sudan',
+            'ET': 'Ethiopia',
+            'ER': 'Eritrea',
+            'DJ': 'Djibouti',
+            'SO': 'Somalia',
+            'KE': 'Kenya',
+            'UG': 'Uganda',
+            'RW': 'Rwanda',
+            'BI': 'Burundi',
+            'TZ': 'Tanzania',
+            'MZ': 'Mozambique',
+            'MW': 'Malawi',
+            'ZM': 'Zambia',
+            'ZW': 'Zimbabwe',
+            'BW': 'Botswana',
+            'NA': 'Namibia',
+            'ZA': 'South Africa',
+            'LS': 'Lesotho',
+            'SZ': 'Eswatini',
+            'MG': 'Madagascar',
+            'MU': 'Mauritius',
+            'SC': 'Seychelles',
+            'KM': 'Comoros',
+            'YT': 'Mayotte',
+            'RE': 'Réunion',
+            'TR': 'Turkey',
+            'GE': 'Georgia',
+            'AM': 'Armenia',
+            'AZ': 'Azerbaijan',
+            'KZ': 'Kazakhstan',
+            'KG': 'Kyrgyzstan',
+            'TJ': 'Tajikistan',
+            'TM': 'Turkmenistan',
+            'UZ': 'Uzbekistan',
+            'MN': 'Mongolia',
+            'NZ': 'New Zealand',
+            'FJ': 'Fiji',
+            'PG': 'Papua New Guinea',
+            'SB': 'Solomon Islands',
+            'VU': 'Vanuatu',
+            'NC': 'New Caledonia',
+            'PF': 'French Polynesia',
+            'WS': 'Samoa',
+            'TO': 'Tonga',
+            'KI': 'Kiribati',
+            'TV': 'Tuvalu',
+            'NR': 'Nauru',
+            'FM': 'Micronesia',
+            'MH': 'Marshall Islands',
+            'PW': 'Palau'
+        };
+        return countryNames[countryCode] || countryCode;
     }
 
     // Detect subdomain takeover
