@@ -408,6 +408,8 @@ class DNSAnalyzer {
             { pattern: 'cloudflare', name: 'Cloudflare', category: 'cloud', description: 'CDN and security services' },
             { pattern: 'cloudfront.net', name: 'AWS CloudFront', category: 'cloud', description: 'Amazon content delivery network' },
             { pattern: 'elb.amazonaws.com', name: 'AWS Load Balancer', category: 'cloud', description: 'Amazon load balancing service' },
+            { pattern: 'awsglobalaccelerator.com', name: 'AWS Global Accelerator', category: 'cloud', description: 'Global application accelerator' },
+            { pattern: 'awsapprunner.com', name: 'AWS App Runner', category: 'cloud', description: 'Containerized application hosting' },
             { pattern: 'amazonaws.com', name: 'Amazon AWS', category: 'cloud', description: 'Cloud computing platform' },
             { pattern: 'fastly.com', name: 'Fastly', category: 'cloud', description: 'Edge cloud platform' },
             
@@ -418,6 +420,8 @@ class DNSAnalyzer {
             { pattern: 'github', name: 'GitHub Pages', category: 'cloud', description: 'Static site hosting' },
             { pattern: 'wixdns.net', name: 'Wix', category: 'cloud', description: 'Website builder platform' },
             { pattern: 'wix.com', name: 'Wix', category: 'cloud', description: 'Website builder platform' },
+            { pattern: 'azurewebsites.net', name: 'Microsoft Azure App Service', category: 'cloud', description: 'Azure web application hosting' },
+            { pattern: 'ondigitalocean.app', name: 'DigitalOcean App Platform', category: 'cloud', description: 'Application hosting platform' },
             
             // Documentation & Content
             { pattern: 'gitbook.io', name: 'GitBook', category: 'documentation', description: 'Documentation platform' },
