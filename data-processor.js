@@ -385,6 +385,11 @@ class DataProcessor {
         );
     }
 
+    // Get all services
+    getAllServices() {
+        return Array.from(this.processedData.services.values());
+    }
+
     // Calculate statistics
     calculateStats() {
         const allActiveSubdomains = this.getActiveSubdomains();

@@ -44,7 +44,7 @@ class UIRenderer {
         this.displaySecurity(securityResults);
         this.displayInterestingFindings(interestingFindings);
         this.displayRedirectsToMain(processedData.redirectsToMain);
-        this.displayCNAMEMappings(processedData.subdomains);
+        this.displayCNAMEMappings(processedData);
         this.displayDNSRecords(processedData.dnsRecords);
         this.displaySubdomains(processedData);
         this.displayHistoricalRecords(processedData.historicalRecords);
@@ -528,15 +528,14 @@ class UIRenderer {
     }
 
     // Display CNAME mappings
-    displayCNAMEMappings(subdomainsMap) {
+    displayCNAMEMappings(processedData) {
         const container = document.getElementById('cnameMappings');
         const section = container?.closest('.service-category');
         if (!container) return;
         
-        // Get unclassified CNAME subdomains
-        const cnameSubdomains = Array.from(subdomainsMap.values()).filter(subdomain =>
-            this.hasSignificantCNAME(subdomain)
-        );
+        // Get properly filtered CNAME mappings from data processor
+        const cnameSubdomains = processedData.dataProcessor ? 
+            processedData.dataProcessor.getCNAMEMappings() : [];
         
         if (cnameSubdomains.length === 0) {
             if (section) section.style.display = 'none';
