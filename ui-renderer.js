@@ -217,13 +217,75 @@ class UIRenderer {
             ` (${recordTypes.join(', ')} records)` : 
             ` (${subdomainCount} records)`;
         
+        // Check if this is a third-party DMARC service
+        const isThirdPartyDMARC = service.isThirdParty && recordTypes.includes('DMARC');
+        const isUnknownThirdParty = isThirdPartyDMARC && !service.isKnownService;
+        
+        // Check if this is a third-party email service (DKIM)
+        const isThirdPartyEmail = service.isThirdParty && service.isEmailService;
+        const isHighConfidenceEmail = isThirdPartyEmail && service.confidence === 'high';
+        
+        // Determine overall third-party status
+        const isAnyThirdParty = isThirdPartyDMARC || isThirdPartyEmail;
+        const isHighRiskThirdParty = isUnknownThirdParty || isHighConfidenceEmail;
+        
+        // Special styling for third-party services
+        const cardClass = isAnyThirdParty ? 
+            (isThirdPartyDMARC ? 'service-card third-party-dmarc' : 'service-card third-party-email') : 
+            'service-card';
+            
+        const alertStyle = isHighRiskThirdParty ? 
+            'background: #fff3cd; border-left: 4px solid #ff6b35; padding: 8px; margin: 8px 0; border-radius: 4px;' :
+            isAnyThirdParty ? 
+            'background: #e8f4f8; border-left: 4px solid #17a2b8; padding: 8px; margin: 8px 0; border-radius: 4px;' :
+            '';
+        
         let html = `
-            <div class="service-card">
+            <div class="${cardClass}">
                 <div class="service-header">
                     <h3>${service.name}${recordTypesText}</h3>
                 </div>
                 <p class="service-description">${service.description}</p>
         `;
+        
+        // Add third-party DMARC warning
+        if (isThirdPartyDMARC) {
+            const warningIcon = isUnknownThirdParty ? '🚨' : '⚠️';
+            const warningText = isUnknownThirdParty ? 
+                'UNKNOWN EXTERNAL DEPENDENCY: This domain receives your DMARC reports but is not a recognized service provider.' :
+                'THIRD-PARTY DEPENDENCY: Your DMARC reports are sent to this external service.';
+            
+            html += `
+                <div style="${alertStyle}">
+                    <strong>${warningIcon} ${warningText}</strong><br>
+                    <span style="color: #666; font-size: 0.9em;">
+                        ${service.securityImplication || 'Email authentication data is shared externally.'}
+                        ${service.reportingEmail ? `<br>📧 Reports sent to: ${service.reportingEmail}` : ''}
+                        ${service.domain ? `<br>🌐 External domain: ${service.domain}` : ''}
+                    </span>
+                </div>
+            `;
+        }
+
+        // Add third-party email service warning (DKIM)
+        if (isThirdPartyEmail) {
+            const warningIcon = isHighConfidenceEmail ? '🚨' : '⚠️';
+            const confidenceText = service.confidence === 'high' ? 'CONFIRMED' : 
+                                 service.confidence === 'medium' ? 'LIKELY' : 'POSSIBLE';
+            const warningText = `${confidenceText} THIRD-PARTY EMAIL SERVICE: Your emails are being sent through an external service.`;
+            
+            html += `
+                <div style="${alertStyle}">
+                    <strong>${warningIcon} ${warningText}</strong><br>
+                    <span style="color: #666; font-size: 0.9em;">
+                        ${service.securityImplication || 'Email delivery handled by external service.'}
+                        ${service.selector ? `<br>🔑 DKIM Selector: ${service.selector}` : ''}
+                        ${service.keyType ? `<br>🔐 Key Type: ${service.keyType}` : ''}
+                        ${service.confidence ? `<br>📊 Confidence: ${service.confidence}` : ''}
+                    </span>
+                </div>
+            `;
+        }
         
         // Show infrastructure information
         if (service.infrastructure) {
@@ -732,6 +794,21 @@ class UIRenderer {
                     html += `<div class="dmarc-parsed">
                         <strong>Policy:</strong> ${record.parsed.policy} | 
                         <strong>Reporting:</strong> ${record.parsed.reporting || 'None configured'}
+                    </div>`;
+                }
+
+                // Show parsed DKIM info if available
+                if (record.parsed && record.type === 'DKIM') {
+                    const confidence = record.parsed.confidence;
+                    const confidenceColor = confidence === 'high' ? '#28a745' : 
+                                           confidence === 'medium' ? '#ffc107' : 
+                                           confidence === 'low' ? '#fd7e14' : '#6c757d';
+                    
+                    html += `<div class="dkim-parsed">
+                        <strong>Selector:</strong> ${record.parsed.selector} | 
+                        <strong>Service:</strong> <span style="color: ${confidenceColor};">${record.parsed.service}</span> |
+                        <strong>Key:</strong> ${record.parsed.keyType} |
+                        <strong>Confidence:</strong> <span style="color: ${confidenceColor};">${confidence}</span>
                     </div>`;
                 }
 

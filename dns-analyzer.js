@@ -713,6 +713,16 @@ class DNSAnalyzer {
             console.warn('Failed to query DMARC records:', error);
         }
 
+        // Query DKIM records using common selectors
+        try {
+            const dkimRecords = await this.queryDKIMRecords(domain);
+            if (dkimRecords.length > 0) {
+                results.records['DKIM'] = dkimRecords;
+            }
+        } catch (error) {
+            console.warn('Failed to query DKIM records:', error);
+        }
+
         return results;
     }
 
@@ -1100,6 +1110,250 @@ class DNSAnalyzer {
 
         console.log(`📊 Subdomain analysis complete: ${results.length}/${subdomains.length} subdomains resolved`);
         return results;
+    }
+
+    // Query DKIM records using common selectors
+    async queryDKIMRecords(domain) {
+        const dkimRecords = [];
+        
+        // Common DKIM selectors used by various email services
+        const commonSelectors = [
+            // Generic/Default selectors
+            'default', 'selector1', 'selector2', 'dkim', 'key1', 'key2', 's1', 's2',
+            
+            // Google Workspace / Gmail
+            'google', '20161025', '20210112',
+            
+            // Microsoft Office 365 / Outlook
+            'selector1', 'selector2', 'sig1', 'sig2',
+            
+            // SendGrid
+            's1', 's2', 'em1', 'em2', 'em3', 'em4', 'em5', 'em6', 'em7', 'em8', 'em9', 'em10',
+            'emshared1', 'emshared2', 'emshared3',
+            
+            // Mailchimp
+            'k1', 'k2', 'k3', 'mc1', 'mc2', 'mc3',
+            
+            // Amazon SES
+            'amazonses', 'ses', 'aws-ses',
+            
+            // Mandrill (Mailchimp Transactional)
+            'mandrill', 'mte1', 'mte2',
+            
+            // Postmark
+            'pm', 'postmark', 'pm1', 'pm2',
+            
+            // SparkPost / MessageSystems
+            'sp', 'sparkpost', 'scph0316', 'scph0817',
+            
+            // Constant Contact
+            'constantcontact', 'cc1', 'cc2',
+            
+            // Campaign Monitor
+            'cm', 'campaignmonitor', 'cm1', 'cm2',
+            
+            // Zendesk
+            'zendesk1', 'zendesk2', 'zendeskverification',
+            
+            // HubSpot
+            'hs1-', 'hs2-', 'hsdomainkey1', 'hsdomainkey2',
+            
+            // Salesforce / ExactTarget
+            'et', 'sf', 'exacttarget', 'sfmc1', 'sfmc2',
+            
+            // MailGun
+            'mg', 'mailgun', 'mg1', 'mg2',
+            
+            // Klaviyo
+            'dkim', 'klaviyo1', 'klaviyo2',
+            
+            // ConvertKit
+            'ck', 'convertkit', 'ck1', 'ck2'
+        ];
+
+        console.log(`🔍 Querying DKIM records for ${domain} using ${commonSelectors.length} common selectors...`);
+        
+        // Try each selector
+        for (const selector of commonSelectors) {
+            try {
+                const dkimSubdomain = `${selector}._domainkey.${domain}`;
+                console.log(`  📡 Checking DKIM selector: ${dkimSubdomain}`);
+                
+                const records = await this.queryDNS(dkimSubdomain, 'TXT');
+                if (records && records.length > 0) {
+                    for (const record of records) {
+                        // Check if this is a valid DKIM record
+                        if (this.isDKIMRecord(record.data)) {
+                            const dkimInfo = {
+                                ...record,
+                                selector: selector,
+                                subdomain: dkimSubdomain,
+                                parsedInfo: this.parseDKIMRecord(record.data, selector)
+                            };
+                            
+                            dkimRecords.push(dkimInfo);
+                            console.log(`  ✅ Found DKIM record with selector '${selector}':`, dkimInfo.parsedInfo);
+                        }
+                    }
+                }
+            } catch (error) {
+                // Silently continue - most selectors won't exist
+                console.log(`    ⚠️  Selector '${selector}' not found (normal)`);
+            }
+        }
+        
+        console.log(`📊 Found ${dkimRecords.length} DKIM records for ${domain}`);
+        return dkimRecords;
+    }
+
+    // Check if a TXT record is a valid DKIM record
+    isDKIMRecord(data) {
+        const lowerData = data.toLowerCase();
+        return lowerData.includes('v=dkim1') || 
+               lowerData.includes('k=rsa') || 
+               lowerData.includes('p=') ||
+               (lowerData.includes('v=') && lowerData.includes('p='));
+    }
+
+    // Parse DKIM record and extract useful information
+    parseDKIMRecord(data, selector) {
+        const info = {
+            selector: selector,
+            version: null,
+            keyType: null,
+            publicKey: null,
+            service: null,
+            flags: null,
+            notes: null,
+            possibleService: null
+        };
+
+        // Extract version
+        const versionMatch = data.match(/v=([^;]+)/i);
+        if (versionMatch) info.version = versionMatch[1];
+
+        // Extract key type
+        const keyTypeMatch = data.match(/k=([^;]+)/i);
+        if (keyTypeMatch) info.keyType = keyTypeMatch[1];
+
+        // Extract public key (truncated for display)
+        const publicKeyMatch = data.match(/p=([^;]+)/i);
+        if (publicKeyMatch) {
+            const fullKey = publicKeyMatch[1];
+            info.publicKey = fullKey.length > 50 ? fullKey.substring(0, 50) + '...' : fullKey;
+        }
+
+        // Extract service type
+        const serviceMatch = data.match(/s=([^;]+)/i);
+        if (serviceMatch) info.service = serviceMatch[1];
+
+        // Extract flags
+        const flagsMatch = data.match(/t=([^;]+)/i);
+        if (flagsMatch) info.flags = flagsMatch[1];
+
+        // Extract notes
+        const notesMatch = data.match(/n=([^;]+)/i);
+        if (notesMatch) info.notes = notesMatch[1];
+
+        // Identify possible email service based on selector
+        info.possibleService = this.identifyEmailServiceFromSelector(selector);
+
+        return info;
+    }
+
+    // Identify email service based on DKIM selector patterns
+    identifyEmailServiceFromSelector(selector) {
+        const lowerSelector = selector.toLowerCase();
+        
+        // Google Workspace / Gmail patterns
+        if (lowerSelector.includes('google') || 
+            /^\d{8}$/.test(lowerSelector) || // 8-digit dates like 20161025
+            lowerSelector === 'default') {
+            return { name: 'Google Workspace', category: 'email-service', confidence: 'medium' };
+        }
+        
+        // Microsoft Office 365 patterns
+        if (lowerSelector.includes('selector') || 
+            lowerSelector.includes('sig')) {
+            return { name: 'Microsoft Office 365', category: 'email-service', confidence: 'low' };
+        }
+        
+        // SendGrid patterns
+        if (lowerSelector.startsWith('s') && /^s\d+$/.test(lowerSelector) ||
+            lowerSelector.startsWith('em') ||
+            lowerSelector.includes('emshared')) {
+            return { name: 'SendGrid', category: 'email-service', confidence: 'high' };
+        }
+        
+        // Mailchimp patterns
+        if (lowerSelector.startsWith('k') && /^k\d+$/.test(lowerSelector) ||
+            lowerSelector.startsWith('mc')) {
+            return { name: 'Mailchimp', category: 'email-service', confidence: 'high' };
+        }
+        
+        // Amazon SES patterns
+        if (lowerSelector.includes('amazonses') || 
+            lowerSelector.includes('ses') ||
+            lowerSelector.includes('aws-ses')) {
+            return { name: 'Amazon SES', category: 'email-service', confidence: 'high' };
+        }
+        
+        // Mandrill patterns
+        if (lowerSelector.includes('mandrill') || 
+            lowerSelector.startsWith('mte')) {
+            return { name: 'Mandrill (Mailchimp Transactional)', category: 'email-service', confidence: 'high' };
+        }
+        
+        // Postmark patterns
+        if (lowerSelector.includes('postmark') || 
+            lowerSelector.startsWith('pm')) {
+            return { name: 'Postmark', category: 'email-service', confidence: 'high' };
+        }
+        
+        // SparkPost patterns
+        if (lowerSelector.includes('sparkpost') || 
+            lowerSelector.startsWith('sp') ||
+            lowerSelector.includes('scph')) {
+            return { name: 'SparkPost', category: 'email-service', confidence: 'high' };
+        }
+        
+        // HubSpot patterns
+        if (lowerSelector.includes('hs') || 
+            lowerSelector.includes('hubspot')) {
+            return { name: 'HubSpot', category: 'email-service', confidence: 'high' };
+        }
+        
+        // Salesforce patterns
+        if (lowerSelector.includes('exacttarget') || 
+            lowerSelector.includes('sfmc') ||
+            lowerSelector.startsWith('et') ||
+            lowerSelector.startsWith('sf')) {
+            return { name: 'Salesforce Marketing Cloud', category: 'email-service', confidence: 'medium' };
+        }
+        
+        // MailGun patterns
+        if (lowerSelector.includes('mailgun') || 
+            lowerSelector.startsWith('mg')) {
+            return { name: 'Mailgun', category: 'email-service', confidence: 'high' };
+        }
+        
+        // Klaviyo patterns
+        if (lowerSelector.includes('klaviyo')) {
+            return { name: 'Klaviyo', category: 'email-service', confidence: 'high' };
+        }
+        
+        // ConvertKit patterns
+        if (lowerSelector.includes('convertkit') || 
+            lowerSelector.startsWith('ck')) {
+            return { name: 'ConvertKit', category: 'email-service', confidence: 'medium' };
+        }
+        
+        // Zendesk patterns
+        if (lowerSelector.includes('zendesk')) {
+            return { name: 'Zendesk', category: 'email-service', confidence: 'high' };
+        }
+        
+        return null;
     }
 
     // Get ASN information for IP with multiple fallback sources - Enhanced for Data Sovereignty Analysis

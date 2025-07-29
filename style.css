@@ -192,6 +192,212 @@ input[type="text"]:focus {
     font-size: medium;
 }
 
+/* Third-party DMARC service styling */
+.service-card {
+    background: #f8f9fa;
+    border-radius: 8px;
+    padding: 16px;
+    margin-bottom: 12px;
+    border-left: 4px solid #667eea;
+}
+
+.service-card.third-party-dmarc {
+    background: #fff8e1;
+    border-left: 4px solid #ff6b35;
+    box-shadow: 0 2px 8px rgba(255, 107, 53, 0.1);
+    position: relative;
+}
+
+.service-card.third-party-dmarc::before {
+    content: "⚠️ THIRD-PARTY";
+    position: absolute;
+    top: -5px;
+    right: 8px;
+    background: #ff6b35;
+    color: white;
+    padding: 2px 8px;
+    border-radius: 0 0 4px 4px;
+    font-size: 0.7rem;
+    font-weight: bold;
+    text-transform: uppercase;
+}
+
+.service-card h3 {
+    margin: 0 0 8px 0;
+    color: #333;
+    font-size: 1.1rem;
+}
+
+.service-card.third-party-dmarc h3 {
+    color: #d63031;
+    font-weight: 600;
+}
+
+.service-card .service-description {
+    color: #666;
+    font-size: 0.9rem;
+    margin-bottom: 12px;
+    line-height: 1.4;
+}
+
+.service-card.third-party-dmarc .service-description {
+    color: #b33c00;
+    font-weight: 500;
+}
+
+/* Third-party email service styling (DKIM-detected) */
+.service-card.third-party-email {
+    background: #e8f5e8;
+    border-left: 4px solid #28a745;
+    box-shadow: 0 2px 8px rgba(40, 167, 69, 0.1);
+    position: relative;
+}
+
+.service-card.third-party-email::before {
+    content: "📧 EMAIL SERVICE";
+    position: absolute;
+    top: -5px;
+    right: 8px;
+    background: #28a745;
+    color: white;
+    padding: 2px 8px;
+    border-radius: 0 0 4px 4px;
+    font-size: 0.7rem;
+    font-weight: bold;
+    text-transform: uppercase;
+}
+
+.service-card.third-party-email h3 {
+    color: #155724;
+    font-weight: 600;
+}
+
+.service-card.third-party-email .service-description {
+    color: #0d4521;
+    font-weight: 500;
+}
+
+/* DKIM parsed info styling */
+.dkim-parsed {
+    background: #f8f9fa;
+    padding: 8px;
+    margin: 8px 0;
+    border-radius: 4px;
+    border-left: 3px solid #28a745;
+    font-size: 0.9rem;
+    color: #495057;
+}
+
+.dkim-parsed strong {
+    color: #1a202c;
+}
+
+/* Export Section Styling */
+.export-section {
+    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+    border-radius: 12px;
+    padding: 25px;
+    margin: 20px 0;
+    color: white;
+    text-align: center;
+}
+
+.export-header h3 {
+    margin: 0 0 8px 0;
+    font-size: 1.4rem;
+    font-weight: 600;
+}
+
+.export-header p {
+    margin: 0 0 20px 0;
+    opacity: 0.9;
+    font-size: 1rem;
+}
+
+.export-buttons {
+    display: flex;
+    gap: 15px;
+    justify-content: center;
+    flex-wrap: wrap;
+}
+
+.export-btn {
+    background: rgba(255, 255, 255, 0.15);
+    border: 2px solid rgba(255, 255, 255, 0.3);
+    border-radius: 10px;
+    padding: 15px 25px;
+    color: white;
+    font-size: 1rem;
+    font-weight: 600;
+    cursor: pointer;
+    transition: all 0.3s ease;
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    min-width: 160px;
+    justify-content: center;
+    backdrop-filter: blur(10px);
+}
+
+.export-btn:hover {
+    background: rgba(255, 255, 255, 0.25);
+    border-color: rgba(255, 255, 255, 0.5);
+    transform: translateY(-2px);
+    box-shadow: 0 8px 25px rgba(0, 0, 0, 0.15);
+}
+
+.export-btn:active {
+    transform: translateY(0);
+    box-shadow: 0 4px 15px rgba(0, 0, 0, 0.1);
+}
+
+.export-btn:disabled {
+    opacity: 0.6;
+    cursor: not-allowed;
+    transform: none;
+}
+
+.export-icon {
+    font-size: 1.2rem;
+}
+
+.export-text {
+    font-weight: 600;
+}
+
+.export-pdf:hover {
+    border-color: #ff6b6b;
+    background: rgba(255, 107, 107, 0.2);
+}
+
+.export-xlsx:hover {
+    border-color: #4ecdc4;
+    background: rgba(78, 205, 196, 0.2);
+}
+
+.export-json:hover {
+    border-color: #f39c12;
+    background: rgba(243, 156, 18, 0.2);
+}
+
+/* Mobile responsiveness for export buttons */
+@media (max-width: 768px) {
+    .export-buttons {
+        flex-direction: column;
+        align-items: center;
+    }
+    
+    .export-btn {
+        width: 100%;
+        max-width: 250px;
+    }
+    
+    .export-section {
+        margin: 15px 0;
+        padding: 20px 15px;
+    }
+}
+
 .risk-section h4 {
     font-size: medium;
     margin-bottom: 10px;

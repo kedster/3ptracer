@@ -85,6 +85,23 @@ class AnalysisController {
             this.uiRenderer.updateProgress(100, 'Analysis complete!');
             this.displayResults(processedData, securityResults);
             
+            // Enable export functionality with enhanced data
+            console.log('🔍 Checking export manager availability:', !!window.exportManager);
+            if (window.exportManager) {
+                console.log('📊 Setting analysis data for export...');
+                
+                // Add dataProcessor reference to processedData for export (same as UIRenderer)
+                const enhancedProcessedData = {
+                    ...processedData,
+                    dataProcessor: this.dataProcessor
+                };
+                
+                window.exportManager.setAnalysisData(enhancedProcessedData, securityResults, domain);
+                console.log('✅ Export data set successfully');
+            } else {
+                console.error('❌ Export manager not available');
+            }
+            
             console.log(`🎉 Analysis complete for ${domain}!`);
             this.debug.logStats(processedData.stats);
             

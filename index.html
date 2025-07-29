@@ -47,6 +47,24 @@
             <div class="results" id="results">
                 <div class="stats" id="stats"></div>
                 
+                <!-- Export Controls -->
+                <div class="export-section" id="exportSection" style="display: none;">
+                    <div class="export-header">
+                        <h3>📊 Export Analysis Results</h3>
+                        <p>Download your analysis results in PDF or Excel format</p>
+                    </div>
+                    <div class="export-buttons">
+                        <button id="exportPDF" class="export-btn export-pdf">
+                            <span class="export-icon">📄</span>
+                            <span class="export-text">Export as PDF</span>
+                        </button>
+                        <button id="exportXLSX" class="export-btn export-xlsx">
+                            <span class="export-icon">📊</span>
+                            <span class="export-text">Export as Excel</span>
+                        </button>
+                    </div>
+                </div>
+                
                 <div class="service-category" id="apiStatusSection" style="display: none;">
                     <div class="category-header">⚠️ API Issues</div>
                     <div class="service-list" id="apiNotifications"></div>
@@ -178,6 +196,12 @@
         </footer>
     </div>
 
+    <!-- Export Libraries -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf-autotable/3.5.31/jspdf.plugin.autotable.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+    
+    <script src="export-manager.js"></script>
     <script src="subdomain-registry.js"></script>
     <script src="service-registry.js"></script>
     <script src="dns-analyzer.js"></script>
