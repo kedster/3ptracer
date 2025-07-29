@@ -360,87 +360,541 @@ input[type="text"]:focus {
     }
 }
 
-/* Footer Styles */
+/* Footer styling */
 .footer {
-    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+    background: linear-gradient(135deg, #2c3e50 0%, #34495e 100%);
     color: white;
-    padding: 40px 0 20px 0;
+    padding: 40px 0;
     margin-top: 40px;
 }
 
 .footer-content {
     max-width: 1200px;
     margin: 0 auto;
-    padding: 0 40px;
+    padding: 0 20px;
     display: grid;
     grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
     gap: 30px;
 }
 
 .footer-section h3 {
-    font-size: 1.4rem;
+    color: #3498db;
     margin-bottom: 15px;
-    font-weight: 700;
+    font-size: 1.2rem;
 }
 
 .footer-section h4 {
-    font-size: 1.2rem;
-    margin-bottom: 15px;
-    font-weight: 600;
+    color: #ecf0f1;
+    margin-bottom: 10px;
+    font-size: 1rem;
 }
 
 .footer-section p {
-    margin-bottom: 12px;
+    color: #bdc3c7;
+    margin-bottom: 10px;
     line-height: 1.6;
-    opacity: 0.9;
-}
-
-.footer-section p:last-child {
-    margin-bottom: 0;
 }
 
 .footer-link {
-    color: #fff;
+    color: #3498db;
     text-decoration: none;
-    font-weight: 600;
-    padding: 8px 16px;
-    background: rgba(255, 255, 255, 0.1);
-    border-radius: 6px;
-    display: inline-block;
-    transition: background 0.3s ease;
+    font-weight: 500;
+    transition: color 0.3s ease;
 }
 
 .footer-link:hover {
-    background: rgba(255, 255, 255, 0.2);
-    text-decoration: none;
+    color: #2980b9;
 }
 
 .footer-note {
     font-size: 0.9rem;
-    opacity: 0.8;
     font-style: italic;
+    color: #95a5a6;
 }
 
 .footer-bottom {
     text-align: center;
-    margin-top: 30px;
+    border-top: 1px solid #34495e;
     padding-top: 20px;
-    border-top: 1px solid rgba(255, 255, 255, 0.2);
+    margin-top: 30px;
+    color: #bdc3c7;
 }
 
-.footer-bottom p {
-    opacity: 0.8;
+/* Data Sovereignty Analysis Styles */
+.sovereignty-disclaimer {
+    background: linear-gradient(135deg, #fff3cd 0%, #ffeaa7 100%);
+    border: 2px solid #ffc107;
+    border-radius: 8px;
+    padding: 20px;
+    margin-bottom: 25px;
+    box-shadow: 0 2px 8px rgba(255, 193, 7, 0.2);
+}
+
+.disclaimer-header {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    margin-bottom: 15px;
+    color: #856404;
+}
+
+.disclaimer-icon {
+    font-size: 1.2rem;
+}
+
+.disclaimer-header strong {
+    font-size: 1.1rem;
+    color: #856404;
+}
+
+.disclaimer-content p {
+    color: #856404;
+    margin-bottom: 12px;
+    line-height: 1.5;
+}
+
+.disclaimer-list {
+    margin: 15px 0;
+    padding-left: 20px;
+    color: #856404;
+}
+
+.disclaimer-list li {
+    margin-bottom: 8px;
+    line-height: 1.4;
+}
+
+.disclaimer-list li strong {
+    color: #664d03;
+}
+
+.disclaimer-recommendation {
+    background: rgba(255, 255, 255, 0.7);
+    padding: 12px;
+    border-radius: 6px;
+    border-left: 4px solid #ffc107;
+    margin-top: 15px;
+    font-size: 0.95rem;
+}
+
+.disclaimer-recommendation strong {
+    color: #664d03;
+}
+
+.sovereignty-summary {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(120px, 1fr));
+    gap: 15px;
+    margin-bottom: 25px;
+    padding: 20px;
+    background: linear-gradient(135deg, #f8f9fa 0%, #e9ecef 100%);
+    border-radius: 12px;
+    border-left: 4px solid #007bff;
+}
+
+.sovereignty-stat {
+    text-align: center;
+    padding: 15px 10px;
+    background: white;
+    border-radius: 8px;
+    box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+}
+
+.sovereignty-stat .stat-number {
+    font-size: 1.8rem;
+    font-weight: 700;
+    color: #007bff;
+    margin-bottom: 5px;
+}
+
+.sovereignty-stat .stat-label {
+    font-size: 0.85rem;
+    color: #6c757d;
+    font-weight: 500;
+}
+
+.sovereignty-section {
+    margin-bottom: 30px;
+}
+
+.sovereignty-section-title {
+    font-size: 1.1rem;
+    font-weight: 600;
+    color: #2c3e50;
+    margin-bottom: 15px;
+    padding-bottom: 8px;
+    border-bottom: 2px solid #e9ecef;
+}
+
+/* Compliance Alerts */
+.sovereignty-alerts {
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+}
+
+.sovereignty-alert {
+    padding: 15px;
+    border-radius: 8px;
+    border-left: 4px solid;
+    background: white;
+    box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+    display: grid;
+    grid-template-columns: auto 1fr auto;
+    gap: 15px;
+    align-items: center;
+}
+
+.sovereignty-alert.alert-high {
+    border-left-color: #dc3545;
+    background: #fff5f5;
+}
+
+.sovereignty-alert.alert-medium {
+    border-left-color: #ffc107;
+    background: #fffbf0;
+}
+
+.sovereignty-alert.alert-low {
+    border-left-color: #28a745;
+    background: #f8fff8;
+}
+
+.alert-severity {
+    font-weight: 700;
+    font-size: 0.8rem;
+    padding: 4px 8px;
+    border-radius: 4px;
+    color: white;
+}
+
+.alert-high .alert-severity {
+    background: #dc3545;
+}
+
+.alert-medium .alert-severity {
+    background: #ffc107;
+    color: #212529;
+}
+
+.alert-low .alert-severity {
+    background: #28a745;
+}
+
+.alert-message {
+    font-weight: 500;
+    color: #2c3e50;
+}
+
+.alert-type {
+    font-size: 0.8rem;
+    color: #6c757d;
+    font-weight: 500;
+}
+
+/* Location Grid */
+.location-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+    gap: 15px;
+}
+
+.location-card {
+    background: white;
+    border-radius: 8px;
+    padding: 15px;
+    box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+    border: 1px solid #e9ecef;
+    transition: transform 0.2s ease;
+}
+
+.location-card:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 4px 12px rgba(0,0,0,0.15);
+}
+
+.location-header {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    margin-bottom: 10px;
+}
+
+.country-flag {
+    font-size: 1.2rem;
+}
+
+.country-name {
+    font-weight: 600;
+    color: #2c3e50;
+}
+
+.location-stats {
+    display: flex;
+    gap: 15px;
+    flex-wrap: wrap;
+    margin-bottom: 15px;
+}
+
+.location-stat {
+    font-size: 0.85rem;
+    color: #6c757d;
+    background: #f8f9fa;
+    padding: 4px 8px;
+    border-radius: 4px;
+    font-weight: 500;
+}
+
+/* Enhanced Location Details */
+.location-details {
+    margin-bottom: 12px;
+    padding-top: 10px;
+    border-top: 1px solid #e9ecef;
+}
+
+.location-details:first-of-type {
+    border-top: none;
+    padding-top: 0;
+}
+
+.location-details strong {
+    color: #2c3e50;
+    font-size: 0.9rem;
+    display: block;
+    margin-bottom: 6px;
+}
+
+.location-list {
+    list-style: none;
+    padding: 0;
+    margin: 0;
+}
+
+.location-list li {
+    padding: 4px 0;
+    font-size: 0.85rem;
+    line-height: 1.4;
+    border-bottom: 1px solid #f8f9fa;
+}
+
+.location-list li:last-child {
+    border-bottom: none;
+}
+
+.service-name, .subdomain-name {
+    color: #495057;
+    font-weight: 500;
+}
+
+.service-provider {
+    color: #6c757d;
+    font-size: 0.8rem;
+    font-style: italic;
+}
+
+.provider-tags {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px;
+}
+
+.provider-tag {
+    background: linear-gradient(135deg, #007bff 0%, #0056b3 100%);
+    color: white;
+    padding: 3px 8px;
+    border-radius: 12px;
+    font-size: 0.75rem;
+    font-weight: 500;
+    box-shadow: 0 1px 3px rgba(0,123,255,0.3);
+}
+
+/* Risk Cards */
+.risk-cards {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+    gap: 15px;
+}
+
+.risk-card {
+    background: white;
+    border-radius: 8px;
+    padding: 18px;
+    box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+    border-left: 4px solid;
+}
+
+.risk-card.risk-high {
+    border-left-color: #dc3545;
+    background: linear-gradient(135deg, #fff5f5 0%, #ffffff 100%);
+}
+
+.risk-card.risk-medium {
+    border-left-color: #ffc107;
+    background: linear-gradient(135deg, #fffbf0 0%, #ffffff 100%);
+}
+
+.risk-card.risk-low {
+    border-left-color: #28a745;
+    background: linear-gradient(135deg, #f8fff8 0%, #ffffff 100%);
+}
+
+.risk-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    margin-bottom: 12px;
+}
+
+.risk-header .country-flag {
+    margin-right: 8px;
+}
+
+.risk-header .country-name {
+    font-weight: 600;
+    color: #2c3e50;
+    flex-grow: 1;
+}
+
+.risk-level {
+    font-size: 0.75rem;
+    font-weight: 700;
+    padding: 3px 8px;
+    border-radius: 4px;
+    color: white;
+}
+
+.risk-high .risk-level {
+    background: #dc3545;
+}
+
+.risk-medium .risk-level {
+    background: #ffc107;
+    color: #212529;
+}
+
+.risk-low .risk-level {
+    background: #28a745;
+}
+
+.risk-stats {
+    display: flex;
+    gap: 12px;
+    margin-bottom: 12px;
+    flex-wrap: wrap;
+}
+
+.risk-stat {
+    font-size: 0.8rem;
+    color: #6c757d;
+    background: #f8f9fa;
+    padding: 4px 8px;
+    border-radius: 4px;
+    font-weight: 500;
+}
+
+.risk-region, .risk-timezone {
+    font-size: 0.85rem;
+    color: #6c757d;
+    margin-bottom: 8px;
+}
+
+.risk-issues {
+    margin-bottom: 12px;
+}
+
+.risk-issues strong {
+    color: #2c3e50;
     font-size: 0.9rem;
 }
 
+.risk-issues ul {
+    margin: 8px 0 0 20px;
+    padding: 0;
+}
+
+.risk-issues li {
+    font-size: 0.85rem;
+    color: #495057;
+    margin-bottom: 4px;
+    line-height: 1.4;
+}
+
+.risk-providers {
+    font-size: 0.85rem;
+    color: #6c757d;
+    padding-top: 10px;
+    border-top: 1px solid #e9ecef;
+}
+
+.risk-providers strong {
+    color: #2c3e50;
+}
+
+/* Distribution Table */
+.distribution-table {
+    background: white;
+    border-radius: 8px;
+    overflow: hidden;
+    box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+    border: 1px solid #e9ecef;
+}
+
+.distribution-table table {
+    width: 100%;
+    border-collapse: collapse;
+}
+
+.distribution-table th {
+    background: linear-gradient(135deg, #f8f9fa 0%, #e9ecef 100%);
+    color: #2c3e50;
+    font-weight: 600;
+    padding: 12px 15px;
+    text-align: left;
+    border-bottom: 2px solid #dee2e6;
+    font-size: 0.9rem;
+}
+
+.distribution-table td {
+    padding: 12px 15px;
+    border-bottom: 1px solid #e9ecef;
+    font-size: 0.85rem;
+    color: #495057;
+}
+
+.distribution-table tr:hover {
+    background: #f8f9fa;
+}
+
+.distribution-table .country-flag {
+    margin-right: 8px;
+}
+
+/* Responsive Design for Sovereignty Analysis */
 @media (max-width: 768px) {
-    .footer-content {
-        grid-template-columns: 1fr;
-        padding: 0 20px;
+    .sovereignty-summary {
+        grid-template-columns: repeat(2, 1fr);
     }
     
-    .footer {
-        padding: 30px 0 15px 0;
+    .location-grid {
+        grid-template-columns: 1fr;
+    }
+    
+    .risk-cards {
+        grid-template-columns: 1fr;
+    }
+    
+    .sovereignty-alert {
+        grid-template-columns: 1fr;
+        text-align: center;
+        gap: 10px;
+    }
+    
+    .distribution-table {
+        overflow-x: auto;
+    }
+    
+    .distribution-table table {
+        min-width: 600px;
     }
 }
 

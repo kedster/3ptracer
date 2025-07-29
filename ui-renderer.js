@@ -41,6 +41,12 @@ class UIRenderer {
         this.displayStats(processedData.stats, securityResults);
         this.displayAPINotifications(apiNotifications);
         this.displayServicesByVendor(processedData.services);
+        
+        // NEW: Display Data Sovereignty Analysis (only for complete analysis)
+        if (!isProgressive && processedData.sovereigntyAnalysis) {
+            this.displayDataSovereignty(processedData.sovereigntyAnalysis);
+        }
+        
         this.displaySecurity(securityResults);
         this.displayInterestingFindings(interestingFindings);
         this.displayRedirectsToMain(processedData.redirectsToMain);
@@ -114,27 +120,15 @@ class UIRenderer {
     }
 
     // Display services grouped by vendor
-    displayServicesByVendor(servicesMap) {
-        const allServices = Array.from(servicesMap.values());
+    displayServicesByVendor(services) {
+        const vendors = ['Microsoft', 'Amazon AWS', 'ProofPoint', 'Google', 'Cloudflare', 'DigitalOcean', 'Linode', 'Hetzner', 'Other'];
         
-        // Hide all vendor sections first
-        this.hideAllVendorSections();
-        
-        // Group services by vendor
-        const vendorGroups = {};
-        allServices.forEach(service => {
-            const vendor = this.getVendorFromService(service);
-            if (!vendorGroups[vendor]) {
-                vendorGroups[vendor] = [];
-            }
-            vendorGroups[vendor].push(service);
-        });
-        
-        // Display each vendor group
-        Object.entries(vendorGroups).forEach(([vendor, services]) => {
-            if (services.length > 0) {
-                this.displayVendorServices(vendor, services);
-            }
+        vendors.forEach(vendor => {
+            const vendorServices = Array.from(services.values()).filter(service => 
+                this.getVendorFromService(service) === vendor
+            );
+            
+            this.displayVendorServices(vendor, vendorServices);
         });
     }
 
@@ -142,7 +136,8 @@ class UIRenderer {
     hideAllVendorSections() {
         const vendorSections = [
             'microsoftServices', 'awsServices', 'proofpointServices',
-            'googleServices', 'cloudflareServices', 'otherServices'
+            'googleServices', 'cloudflareServices', 'digitaloceanServices',
+            'linodeServices', 'hetznerServices', 'otherServices'
         ];
         
         vendorSections.forEach(containerId => {
@@ -162,6 +157,8 @@ class UIRenderer {
         if (service.name.includes('Google')) return 'Google';
         if (service.name.includes('Cloudflare')) return 'Cloudflare';
         if (service.name.includes('DigitalOcean')) return 'DigitalOcean';
+        if (service.name.includes('Linode')) return 'Linode';
+        if (service.name.includes('Hetzner')) return 'Hetzner';
         return 'Other';
     }
 
@@ -196,7 +193,9 @@ class UIRenderer {
             'ProofPoint': 'proofpointServices',
             'Google': 'googleServices',
             'Cloudflare': 'cloudflareServices',
-            'DigitalOcean': 'otherServices',
+            'DigitalOcean': 'digitaloceanServices',
+            'Linode': 'linodeServices',
+            'Hetzner': 'hetznerServices',
             'Other': 'otherServices'
         };
         
@@ -880,5 +879,309 @@ class UIRenderer {
         });
         
         container.innerHTML = html;
+    }
+
+    // Create subdomain link (for consistent linking behavior)
+    createSubdomainLink(subdomain) {
+        return `<a href="https://${subdomain}" target="_blank" rel="noopener" class="subdomain-link">${subdomain}</a>`;
+    }
+
+    // Truncate text for display
+    truncateText(text, maxLength) {
+        if (text.length <= maxLength) return text;
+        return text.substring(0, maxLength) + '...';
+    }
+
+    // NEW: Display Data Sovereignty Analysis
+    displayDataSovereignty(sovereigntyData) {
+        const container = document.getElementById('dataSovereigntyAnalysis');
+        const section = container?.closest('.service-category');
+        
+        if (!container) {
+            console.warn('Data sovereignty container not found');
+            return;
+        }
+
+        // Hide section if no meaningful sovereignty data
+        if (!sovereigntyData || 
+            sovereigntyData.statistics.uniqueCountries === 0 || 
+            sovereigntyData.statistics.totalIPs === 0 ||
+            sovereigntyData.countryDistribution.size === 0) {
+            if (section) section.style.display = 'none';
+            return;
+        }
+
+        // Show section since we have data to display
+        if (section) section.style.display = 'block';
+
+        let html = `
+            <div class="sovereignty-disclaimer">
+                <div class="disclaimer-header">
+                    <span class="disclaimer-icon">⚠️</span>
+                    <strong>Important Disclaimer</strong>
+                </div>
+                <div class="disclaimer-content">
+                    <p><strong>This analysis is based solely on DNS resolutions received from your current location and may not represent the complete picture.</strong></p>
+                    <ul class="disclaimer-list">
+                        <li><strong>Geographic Variations:</strong> DNS queries from different locations may return different IP addresses due to CDN routing, load balancing, and regional infrastructure.</li>
+                        <li><strong>Anycast & CDN Networks:</strong> Services using Cloudflare, AWS CloudFront, or similar networks may appear to be in different countries depending on your location.</li>
+                        <li><strong>Dynamic Routing:</strong> Load balancers and traffic managers can route requests to different data centers based on current load, performance, or availability.</li>
+                        <li><strong>Time-Sensitive:</strong> Infrastructure locations can change over time as organizations migrate services or adjust routing policies.</li>
+                        <li><strong>Limited Scope:</strong> This analysis only covers DNS-discoverable infrastructure and may not capture all data processing locations, backup sites, or third-party integrations.</li>
+                    </ul>
+                    <p class="disclaimer-recommendation">
+                        <strong>Recommendation:</strong> Use this analysis as a starting point for data sovereignty assessment. For comprehensive compliance evaluation, conduct analysis from multiple geographic locations and consult directly with service providers about their actual data processing locations and cross-border data flows.
+                    </p>
+                </div>
+            </div>
+            
+            <div class="sovereignty-summary">
+                <div class="sovereignty-stat">
+                    <div class="stat-number">${sovereigntyData.statistics.uniqueCountries}</div>
+                    <div class="stat-label">Countries</div>
+                </div>
+                <div class="sovereignty-stat">
+                    <div class="stat-number">${sovereigntyData.statistics.totalIPs}</div>
+                    <div class="stat-label">IP Addresses</div>
+                </div>
+                <div class="sovereignty-stat">
+                    <div class="stat-number">${sovereigntyData.riskAssessment.high.length}</div>
+                    <div class="stat-label">High Risk</div>
+                </div>
+                <div class="sovereignty-stat">
+                    <div class="stat-number">${sovereigntyData.statistics.complianceAlerts.length}</div>
+                    <div class="stat-label">Compliance Alerts</div>
+                </div>
+            </div>
+        `;
+
+        // Compliance Alerts Section
+        if (sovereigntyData.statistics.complianceAlerts.length > 0) {
+            html += `
+                <div class="sovereignty-section">
+                    <h4 class="sovereignty-section-title">🚨 Compliance Alerts</h4>
+                    <div class="sovereignty-alerts">
+            `;
+
+            sovereigntyData.statistics.complianceAlerts.forEach(alert => {
+                const alertClass = alert.severity === 'high' ? 'alert-high' : alert.severity === 'medium' ? 'alert-medium' : 'alert-low';
+                html += `
+                    <div class="sovereignty-alert ${alertClass}">
+                        <div class="alert-severity">${alert.severity.toUpperCase()}</div>
+                        <div class="alert-message">${alert.message}</div>
+                        <div class="alert-type">${alert.type.replace('-', ' ').toUpperCase()}</div>
+                    </div>
+                `;
+            });
+
+            html += `
+                    </div>
+                </div>
+            `;
+        }
+
+        // Primary Data Locations
+        if (sovereigntyData.statistics.primaryDataLocations.length > 0) {
+            html += `
+                <div class="sovereignty-section">
+                    <h4 class="sovereignty-section-title">🌍 Primary Data Locations</h4>
+                    <div class="location-grid">
+            `;
+
+            sovereigntyData.statistics.primaryDataLocations.forEach(location => {
+                const flag = this.getCountryFlag(location.countryCode);
+                
+                // Get the full country data to show detailed listings
+                const countryData = sovereigntyData.countryDistribution.get(location.countryCode);
+                
+                html += `
+                    <div class="location-card">
+                        <div class="location-header">
+                            <span class="country-flag">${flag}</span>
+                            <span class="country-name">${location.country}</span>
+                        </div>
+                        <div class="location-stats">
+                            <span class="location-stat">${location.services} services</span>
+                            <span class="location-stat">${location.subdomains} subdomains</span>
+                            <span class="location-stat">${location.totalIPs} IPs</span>
+                        </div>
+                `;
+                
+                // Show detailed services if any
+                if (countryData && countryData.services.length > 0) {
+                    html += `
+                        <div class="location-details">
+                            <strong>Services:</strong>
+                            <ul class="location-list">
+                                ${countryData.services.map(service => 
+                                    `<li><span class="service-name">${service.name}</span> <span class="service-provider">(${service.provider})</span></li>`
+                                ).join('')}
+                            </ul>
+                        </div>
+                    `;
+                }
+                
+                // Show detailed subdomains if any
+                if (countryData && countryData.subdomains.length > 0) {
+                    html += `
+                        <div class="location-details">
+                            <strong>Subdomains:</strong>
+                            <ul class="location-list">
+                                ${countryData.subdomains.map(subdomain => 
+                                    `<li><span class="subdomain-name">${subdomain.name}</span> <span class="service-provider">(${subdomain.provider})</span></li>`
+                                ).join('')}
+                            </ul>
+                        </div>
+                    `;
+                }
+                
+                // Show unique providers for this location
+                if (countryData && countryData.providers.size > 0) {
+                    const providers = Array.from(countryData.providers);
+                    html += `
+                        <div class="location-details">
+                            <strong>Providers:</strong>
+                            <div class="provider-tags">
+                                ${providers.map(provider => 
+                                    `<span class="provider-tag">${provider}</span>`
+                                ).join('')}
+                            </div>
+                        </div>
+                    `;
+                }
+                
+                html += `
+                    </div>
+                `;
+            });
+
+            html += `
+                    </div>
+                </div>
+            `;
+        }
+
+        // Risk Assessment by Level
+        ['high', 'medium', 'low'].forEach(riskLevel => {
+            const risks = sovereigntyData.riskAssessment[riskLevel];
+            if (risks.length > 0) {
+                const riskIcon = riskLevel === 'high' ? '🔴' : riskLevel === 'medium' ? '🟡' : '🟢';
+                const riskTitle = riskLevel.charAt(0).toUpperCase() + riskLevel.slice(1) + ' Risk Countries';
+                
+                html += `
+                    <div class="sovereignty-section">
+                        <h4 class="sovereignty-section-title">${riskIcon} ${riskTitle}</h4>
+                        <div class="risk-cards">
+                `;
+
+                risks.forEach(risk => {
+                    const flag = this.getCountryFlag(risk.countryCode);
+                    html += `
+                        <div class="risk-card risk-${riskLevel}">
+                            <div class="risk-header">
+                                <span class="country-flag">${flag}</span>
+                                <span class="country-name">${risk.country}</span>
+                                <span class="risk-level">${riskLevel.toUpperCase()}</span>
+                            </div>
+                            <div class="risk-stats">
+                                <span class="risk-stat">${risk.totalServices} services</span>
+                                <span class="risk-stat">${risk.totalSubdomains} subdomains</span>
+                                <span class="risk-stat">${risk.totalIPs} IPs</span>
+                            </div>
+                            ${risk.details.region !== 'Unknown' ? `<div class="risk-region">Region: ${risk.details.region}</div>` : ''}
+                            ${risk.details.timezone !== 'Unknown' ? `<div class="risk-timezone">Timezone: ${risk.details.timezone}</div>` : ''}
+                            
+                            ${risk.issues.length > 0 ? `
+                                <div class="risk-issues">
+                                    <strong>Issues:</strong>
+                                    <ul>
+                                        ${risk.issues.map(issue => `<li>${issue}</li>`).join('')}
+                                    </ul>
+                                </div>
+                            ` : ''}
+                            
+                            ${risk.providers.length > 0 ? `
+                                <div class="risk-providers">
+                                    <strong>Providers:</strong> ${risk.providers.slice(0, 3).join(', ')}${risk.providers.length > 3 ? `... (+${risk.providers.length - 3} more)` : ''}
+                                </div>
+                            ` : ''}
+                        </div>
+                    `;
+                });
+
+                html += `
+                        </div>
+                    </div>
+                `;
+            }
+        });
+
+        // Geographic Distribution
+        if (sovereigntyData.countryDistribution.size > 0) {
+            html += `
+                <div class="sovereignty-section">
+                    <h4 class="sovereignty-section-title">🗺️ Complete Geographic Distribution</h4>
+                    <div class="distribution-table">
+                        <table>
+                            <thead>
+                                <tr>
+                                    <th>Country</th>
+                                    <th>Region</th>
+                                    <th>Services</th>
+                                    <th>Subdomains</th>
+                                    <th>IPs</th>
+                                    <th>Providers</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+            `;
+
+            const sortedCountries = Array.from(sovereigntyData.countryDistribution.entries())
+                .sort((a, b) => (b[1].totalIPs + b[1].services.length) - (a[1].totalIPs + a[1].services.length));
+
+            sortedCountries.forEach(([countryCode, countryData]) => {
+                const flag = this.getCountryFlag(countryCode);
+                const providers = Array.from(countryData.providers);
+                
+                html += `
+                    <tr>
+                        <td>
+                            <span class="country-flag">${flag}</span>
+                            ${countryData.countryName}
+                        </td>
+                        <td>${countryData.region}</td>
+                        <td>${countryData.services.length}</td>
+                        <td>${countryData.subdomains.length}</td>
+                        <td>${countryData.totalIPs}</td>
+                        <td>${providers.slice(0, 2).join(', ')}${providers.length > 2 ? ` (+${providers.length - 2})` : ''}</td>
+                    </tr>
+                `;
+            });
+
+            html += `
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            `;
+        }
+
+        container.innerHTML = html;
+    }
+
+    // Helper method to get country flag emoji
+    getCountryFlag(countryCode) {
+        const flagMap = {
+            'US': '🇺🇸', 'CA': '🇨🇦', 'GB': '🇬🇧', 'DE': '🇩🇪', 'FR': '🇫🇷', 'JP': '🇯🇵', 
+            'AU': '🇦🇺', 'BR': '🇧🇷', 'IN': '🇮🇳', 'CN': '🇨🇳', 'RU': '🇷🇺', 'NL': '🇳🇱', 
+            'SG': '🇸🇬', 'IE': '🇮🇪', 'CH': '🇨🇭', 'SE': '🇸🇪', 'NO': '🇳🇴', 'DK': '🇩🇰', 
+            'FI': '🇫🇮', 'IT': '🇮🇹', 'ES': '🇪🇸', 'BE': '🇧🇪', 'AT': '🇦🇹', 'PL': '🇵🇱', 
+            'CZ': '🇨🇿', 'HU': '🇭🇺', 'GR': '🇬🇷', 'PT': '🇵🇹', 'KR': '🇰🇷', 'TW': '🇹🇼', 
+            'HK': '🇭🇰', 'MX': '🇲🇽', 'AR': '🇦🇷', 'CL': '🇨🇱', 'CO': '🇨🇴', 'TH': '🇹🇭', 
+            'MY': '🇲🇾', 'ID': '🇮🇩', 'PH': '🇵🇭', 'VN': '🇻🇳', 'BD': '🇧🇩', 'PK': '🇵🇰', 
+            'IL': '🇮🇱', 'SA': '🇸🇦', 'AE': '🇦🇪', 'EG': '🇪🇬', 'ZA': '🇿🇦', 'TR': '🇹🇷', 
+            'NZ': '🇳🇿', 'UA': '🇺🇦', 'IR': '🇮🇷', 'IQ': '🇮🇶'
+        };
+        return flagMap[countryCode] || '🏳️';
     }
 } 

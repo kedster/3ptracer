@@ -342,6 +342,10 @@ class DNSAnalyzer {
             return { vendor: 'Cloudflare', category: 'CDN' };
         } else if (org.includes('digitalocean')) {
             return { vendor: 'DigitalOcean', category: 'Cloud' };
+        } else if (org.includes('linode')) {
+            return { vendor: 'Linode', category: 'Cloud' };
+        } else if (org.includes('hetzner')) {
+            return { vendor: 'Hetzner', category: 'Cloud' };
         } else if (org.includes('fastly')) {
             return { vendor: 'Fastly', category: 'CDN' };
         } else {
@@ -1098,7 +1102,7 @@ class DNSAnalyzer {
         return results;
     }
 
-    // Get ASN information for IP with multiple fallback sources
+    // Get ASN information for IP with multiple fallback sources - Enhanced for Data Sovereignty Analysis
     async getASNInfo(ip) {
         const providers = [
             {
@@ -1108,17 +1112,31 @@ class DNSAnalyzer {
                     asn: data.org || 'Unknown',
                     isp: data.org || 'Unknown',
                     location: data.country || 'Unknown',
-                    city: data.city || 'Unknown'
+                    city: data.city || 'Unknown',
+                    // Enhanced data sovereignty fields
+                    country: data.country || 'Unknown',
+                    countryName: this.getCountryName(data.country) || 'Unknown',
+                    region: data.region || 'Unknown',
+                    timezone: data.timezone || 'Unknown',
+                    coordinates: data.loc ? data.loc.split(',') : null,
+                    postal: data.postal || 'Unknown'
                 })
             },
             {
                 name: 'ip-api.com',
-                url: `http://ip-api.com/json/${ip}`,
+                url: `http://ip-api.com/json/${ip}?fields=status,message,country,countryCode,region,regionName,city,zip,lat,lon,timezone,isp,org,as,query`,
                 transform: (data) => ({
                     asn: data.as || 'Unknown',
                     isp: data.isp || 'Unknown',
                     location: data.countryCode || 'Unknown',
-                    city: data.city || 'Unknown'
+                    city: data.city || 'Unknown',
+                    // Enhanced data sovereignty fields
+                    country: data.countryCode || 'Unknown',
+                    countryName: data.country || 'Unknown',
+                    region: data.regionName || 'Unknown',
+                    timezone: data.timezone || 'Unknown',
+                    coordinates: (data.lat && data.lon) ? [data.lat, data.lon] : null,
+                    postal: data.zip || 'Unknown'
                 })
             },
             {
@@ -1128,7 +1146,14 @@ class DNSAnalyzer {
                     asn: data.asn || 'Unknown',
                     isp: data.org || 'Unknown',
                     location: data.country_code || 'Unknown',
-                    city: data.city || 'Unknown'
+                    city: data.city || 'Unknown',
+                    // Enhanced data sovereignty fields
+                    country: data.country_code || 'Unknown',
+                    countryName: data.country_name || 'Unknown',
+                    region: data.region || 'Unknown',
+                    timezone: data.timezone || 'Unknown',
+                    coordinates: (data.latitude && data.longitude) ? [data.latitude, data.longitude] : null,
+                    postal: data.postal || 'Unknown'
                 })
             }
         ];
@@ -1168,8 +1193,163 @@ class DNSAnalyzer {
             asn: 'Unknown',
             isp: 'Unknown',
             location: 'Unknown',
-            city: 'Unknown'
+            city: 'Unknown',
+            country: 'Unknown',
+            countryName: 'Unknown',
+            region: 'Unknown',
+            timezone: 'Unknown',
+            coordinates: null,
+            postal: 'Unknown'
         };
+    }
+
+    // Helper method to get full country names from country codes
+    getCountryName(countryCode) {
+        const countryNames = {
+            'US': 'United States',
+            'CA': 'Canada',
+            'GB': 'United Kingdom',
+            'DE': 'Germany',
+            'FR': 'France',
+            'JP': 'Japan',
+            'AU': 'Australia',
+            'BR': 'Brazil',
+            'IN': 'India',
+            'CN': 'China',
+            'RU': 'Russia',
+            'NL': 'Netherlands',
+            'SG': 'Singapore',
+            'IE': 'Ireland',
+            'CH': 'Switzerland',
+            'SE': 'Sweden',
+            'NO': 'Norway',
+            'DK': 'Denmark',
+            'FI': 'Finland',
+            'IT': 'Italy',
+            'ES': 'Spain',
+            'BE': 'Belgium',
+            'AT': 'Austria',
+            'PL': 'Poland',
+            'CZ': 'Czech Republic',
+            'HU': 'Hungary',
+            'GR': 'Greece',
+            'PT': 'Portugal',
+            'RO': 'Romania',
+            'BG': 'Bulgaria',
+            'HR': 'Croatia',
+            'SI': 'Slovenia',
+            'SK': 'Slovakia',
+            'LT': 'Lithuania',
+            'LV': 'Latvia',
+            'EE': 'Estonia',
+            'LU': 'Luxembourg',
+            'MT': 'Malta',
+            'CY': 'Cyprus',
+            'MX': 'Mexico',
+            'AR': 'Argentina',
+            'CL': 'Chile',
+            'CO': 'Colombia',
+            'PE': 'Peru',
+            'VE': 'Venezuela',
+            'UY': 'Uruguay',
+            'PY': 'Paraguay',
+            'BO': 'Bolivia',
+            'EC': 'Ecuador',
+            'GY': 'Guyana',
+            'SR': 'Suriname',
+            'GF': 'French Guiana',
+            'FK': 'Falkland Islands',
+            'KR': 'South Korea',
+            'TW': 'Taiwan',
+            'HK': 'Hong Kong',
+            'MO': 'Macau',
+            'TH': 'Thailand',
+            'MY': 'Malaysia',
+            'ID': 'Indonesia',
+            'PH': 'Philippines',
+            'VN': 'Vietnam',
+            'LA': 'Laos',
+            'KH': 'Cambodia',
+            'MM': 'Myanmar',
+            'BD': 'Bangladesh',
+            'LK': 'Sri Lanka',
+            'NP': 'Nepal',
+            'BT': 'Bhutan',
+            'MV': 'Maldives',
+            'PK': 'Pakistan',
+            'AF': 'Afghanistan',
+            'IR': 'Iran',
+            'IQ': 'Iraq',
+            'SY': 'Syria',
+            'LB': 'Lebanon',
+            'JO': 'Jordan',
+            'IL': 'Israel',
+            'PS': 'Palestine',
+            'SA': 'Saudi Arabia',
+            'AE': 'United Arab Emirates',
+            'QA': 'Qatar',
+            'BH': 'Bahrain',
+            'KW': 'Kuwait',
+            'OM': 'Oman',
+            'YE': 'Yemen',
+            'EG': 'Egypt',
+            'LY': 'Libya',
+            'TN': 'Tunisia',
+            'DZ': 'Algeria',
+            'MA': 'Morocco',
+            'SD': 'Sudan',
+            'SS': 'South Sudan',
+            'ET': 'Ethiopia',
+            'ER': 'Eritrea',
+            'DJ': 'Djibouti',
+            'SO': 'Somalia',
+            'KE': 'Kenya',
+            'UG': 'Uganda',
+            'RW': 'Rwanda',
+            'BI': 'Burundi',
+            'TZ': 'Tanzania',
+            'MZ': 'Mozambique',
+            'MW': 'Malawi',
+            'ZM': 'Zambia',
+            'ZW': 'Zimbabwe',
+            'BW': 'Botswana',
+            'NA': 'Namibia',
+            'ZA': 'South Africa',
+            'LS': 'Lesotho',
+            'SZ': 'Eswatini',
+            'MG': 'Madagascar',
+            'MU': 'Mauritius',
+            'SC': 'Seychelles',
+            'KM': 'Comoros',
+            'YT': 'Mayotte',
+            'RE': 'Réunion',
+            'TR': 'Turkey',
+            'GE': 'Georgia',
+            'AM': 'Armenia',
+            'AZ': 'Azerbaijan',
+            'KZ': 'Kazakhstan',
+            'KG': 'Kyrgyzstan',
+            'TJ': 'Tajikistan',
+            'TM': 'Turkmenistan',
+            'UZ': 'Uzbekistan',
+            'MN': 'Mongolia',
+            'NZ': 'New Zealand',
+            'FJ': 'Fiji',
+            'PG': 'Papua New Guinea',
+            'SB': 'Solomon Islands',
+            'VU': 'Vanuatu',
+            'NC': 'New Caledonia',
+            'PF': 'French Polynesia',
+            'WS': 'Samoa',
+            'TO': 'Tonga',
+            'KI': 'Kiribati',
+            'TV': 'Tuvalu',
+            'NR': 'Nauru',
+            'FM': 'Micronesia',
+            'MH': 'Marshall Islands',
+            'PW': 'Palau'
+        };
+        return countryNames[countryCode] || countryCode;
     }
 
     // Detect subdomain takeover

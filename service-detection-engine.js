@@ -113,6 +113,16 @@ class ServiceDetectionEngine {
                     cnamePatterns: ['ondigitalocean.app'],
                     description: 'Cloud infrastructure platform'
                 },
+                'Linode': {
+                    patterns: ['linode.com', 'linodeobjects.com'],
+                    cnamePatterns: ['linode.com'],
+                    description: 'Cloud infrastructure platform'
+                },
+                'Hetzner': {
+                    patterns: ['hetzner.cloud', 'hetzner.com'],
+                    cnamePatterns: ['hetzner.cloud'],
+                    description: 'Cloud infrastructure platform'
+                },
                 'GitHub Pages': {
                     patterns: ['github.io'],
                     cnamePatterns: ['github.io'],
@@ -514,33 +524,61 @@ class ServiceDetectionEngine {
         return `${mainDomain.charAt(0).toUpperCase() + mainDomain.slice(1)} DMARC Service`;
     }
 
-    // Classify vendor from ASN information
+    // Enhanced ASN-based vendor classification
     classifyVendor(asnInfo) {
         if (!asnInfo || !asnInfo.asn) {
-            return { vendor: 'Unknown', category: 'Unknown' };
+            return { vendor: 'Unknown', category: 'infrastructure' };
         }
-
+        
         const asn = asnInfo.asn.toLowerCase();
         
-        for (const [vendor, pattern] of Object.entries(this.vendorPatterns)) {
-            if (pattern.test(asn)) {
-                return {
-                    vendor: vendor,
-                    asn: asnInfo.asn,
-                    location: asnInfo.location,
-                    city: asnInfo.city,
-                    category: 'infrastructure'
-                };
-            }
+        // Check for known cloud providers
+        if (asn.includes('amazon') || asn.includes('aws')) {
+            return { 
+                vendor: 'Amazon AWS', 
+                category: 'cloud',
+                asn: asnInfo.asn,
+                location: asnInfo.location,
+                city: asnInfo.city,
+                isp: asnInfo.isp
+            };
+        } else if (asn.includes('digitalocean')) {
+            return { 
+                vendor: 'DigitalOcean', 
+                category: 'cloud',
+                asn: asnInfo.asn,
+                location: asnInfo.location,
+                city: asnInfo.city,
+                isp: asnInfo.isp
+            };
+        } else if (asn.includes('linode')) {
+            return { 
+                vendor: 'Linode', 
+                category: 'cloud',
+                asn: asnInfo.asn,
+                location: asnInfo.location,
+                city: asnInfo.city,
+                isp: asnInfo.isp
+            };
+        } else if (asn.includes('hetzner')) {
+            return { 
+                vendor: 'Hetzner', 
+                category: 'cloud',
+                asn: asnInfo.asn,
+                location: asnInfo.location,
+                city: asnInfo.city,
+                isp: asnInfo.isp
+            };
+        } else {
+            return { 
+                vendor: asnInfo.asn || 'Unknown',
+                category: 'infrastructure',
+                asn: asnInfo.asn,
+                location: asnInfo.location,
+                city: asnInfo.city,
+                isp: asnInfo.isp
+            };
         }
-
-        return {
-            vendor: asnInfo.asn || 'Unknown',
-            asn: asnInfo.asn,
-            location: asnInfo.location,
-            city: asnInfo.city,
-            category: 'infrastructure'
-        };
     }
 
     // Security analysis methods
