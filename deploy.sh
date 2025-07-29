@@ -40,6 +40,7 @@ cp ui-renderer.js docs/
 cp analysis-controller.js docs/
 cp service-registry.js docs/
 cp subdomain-registry.js docs/
+cp export-manager.js docs/
 
 # Generate release status file with timestamp
 echo "📅 Generating release status..."
@@ -67,6 +68,7 @@ required_files=(
     "analysis-controller.js"
     "service-registry.js"
     "subdomain-registry.js"
+    "export-manager.js"
     "release-status.txt"
     ".nojekyll"
 )
@@ -95,6 +97,7 @@ if [ ${#missing_files[@]} -eq 0 ]; then
     echo "      - ui-renderer.js (UI rendering)"
     echo "      - service-registry.js (service management)"
     echo "      - subdomain-registry.js (subdomain management)"
+    echo "      - export-manager.js (JSON/PDF/XLSX export functionality)"
     echo "   📅 Deployment info:"
     echo "      - release-status.txt (deployment timestamp)"
     echo "      - .nojekyll (disable jekyll processing)"
