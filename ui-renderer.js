@@ -389,7 +389,7 @@ class UIRenderer {
             1: 'A', 5: 'CNAME', 6: 'SOA', 15: 'MX', 16: 'TXT', 28: 'AAAA',
             2: 'NS', 12: 'PTR', 33: 'SRV', 46: 'RRSIG', 47: 'NSEC',
             48: 'DNSKEY', 43: 'DS', 44: 'SSHFP', 45: 'IPSECKEY',
-            99: 'SPF', 250: 'CAA'
+            99: 'SPF', 250: 'CAA', 257: 'CAA'
         };
         return recordTypes[typeNumber] || `Type ${typeNumber}`;
     }
@@ -809,6 +809,29 @@ class UIRenderer {
                         <strong>Service:</strong> <span style="color: ${confidenceColor};">${record.parsed.service}</span> |
                         <strong>Key:</strong> ${record.parsed.keyType} |
                         <strong>Confidence:</strong> <span style="color: ${confidenceColor};">${confidence}</span>
+                    </div>`;
+                }
+
+                // Show parsed CAA info if available
+                if (record.parsed && record.type === 'CAA') {
+                    const trustColor = record.parsed.isKnownCA ? '#28a745' : '#ffc107';
+                    
+                    html += `<div class="caa-parsed">
+                        <strong>Tag:</strong> ${record.parsed.tag} | 
+                        <strong>Authority:</strong> <span style="color: ${trustColor};">${record.parsed.authority}</span> |
+                        <strong>Flags:</strong> ${record.parsed.flags} |
+                        <strong>Trust Level:</strong> <span style="color: ${trustColor};">${record.parsed.isKnownCA ? 'Known CA' : 'Unknown CA'}</span>
+                    </div>`;
+                }
+
+                // Show parsed SRV info if available
+                if (record.parsed && record.type === 'SRV') {
+                    html += `<div class="srv-parsed">
+                        <strong>Service:</strong> ${record.parsed.service} | 
+                        <strong>Target:</strong> ${record.parsed.target}:${record.parsed.port} |
+                        <strong>Priority:</strong> ${record.parsed.priority} |
+                        <strong>Weight:</strong> ${record.parsed.weight} |
+                        <strong>Type:</strong> ${record.parsed.serviceType}
                     </div>`;
                 }
 

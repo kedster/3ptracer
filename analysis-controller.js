@@ -173,12 +173,12 @@ class AnalysisController {
         
         // Update progress for each source
         this.uiRenderer.updateProgress(22, 'Querying Certificate Transparency logs...');
-        this.addAPINotification('Certificate Transparency', 'Querying crt.sh and other CT logs (may take 10-30 seconds)...', 'info');
+        this.addAPINotification('Certificate Transparency', 'Querying crt.sh and other CT logs (may take 30-90 seconds)...', 'info');
         
         try {
-            // Add timeout to prevent indefinite waiting
+            // Add timeout to prevent indefinite waiting - increased from 45s to 90s for better reliability
             const timeoutPromise = new Promise((_, reject) => 
-                setTimeout(() => reject(new Error('Subdomain discovery timeout')), 45000) // 45 second timeout
+                setTimeout(() => reject(new Error('Certificate Transparency query timeout - external APIs taking too long')), 90000) // 90 second timeout
             );
             
             const discoveryPromise = this.dnsAnalyzer.getSubdomainsFromCT(domain);
@@ -196,7 +196,35 @@ class AnalysisController {
             
         } catch (error) {
             console.warn(`⚠️ Subdomain discovery error:`, error.message);
-            this.addAPINotification('Subdomain Discovery', `Warning: ${error.message}. Continuing with available data.`, 'warning');
+            
+            // Get detailed API status information
+            const apiStatuses = this.dnsAnalyzer.getCTApiStatuses();
+            
+            if (error.message.includes('timeout')) {
+                // Generate detailed timeout message
+                let timeoutMessage = 'Certificate Transparency APIs timeout: ';
+                const timeoutDetails = [];
+                
+                if (apiStatuses.completed.length > 0) {
+                    timeoutDetails.push(`✅ ${apiStatuses.completed.join(', ')} succeeded`);
+                }
+                if (apiStatuses.timeout.length > 0) {
+                    timeoutDetails.push(`⏰ ${apiStatuses.timeout.join(', ')} timed out`);
+                }
+                if (apiStatuses.failed.length > 0) {
+                    timeoutDetails.push(`❌ ${apiStatuses.failed.join(', ')} failed`);
+                }
+                
+                if (timeoutDetails.length > 0) {
+                    timeoutMessage += timeoutDetails.join('; ');
+                } else {
+                    timeoutMessage += 'All APIs took too long to respond';
+                }
+                
+                this.addAPINotification('Certificate Transparency', timeoutMessage + '. Continuing with available data.', 'warning');
+            } else {
+                this.addAPINotification('Subdomain Discovery', `Warning: ${error.message}. Continuing with available data.`, 'warning');
+            }
             
             // FIXED: Return processed subdomain results even when discovery times out
             const processedResults = this.dnsAnalyzer.getProcessedSubdomainResults();

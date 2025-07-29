@@ -144,6 +144,15 @@ class DNSAnalyzer {
         return results;
     }
 
+    // Get Certificate Transparency API statuses for detailed reporting
+    getCTApiStatuses() {
+        return this.ctApiStatuses || {
+            completed: [],
+            timeout: [],
+            failed: []
+        };
+    }
+
     // Get historical records
     getHistoricalRecords() {
         return this.historicalRecords;
@@ -692,7 +701,8 @@ class DNSAnalyzer {
         // - TXT: Verification, SPF, DMARC policies
         // - MX: Email routing
         // - NS: Authoritative nameservers
-        const recordTypes = ['A', 'CNAME', 'TXT', 'MX', 'NS'];
+        // - CAA: Certificate Authority Authorization (security trust relationships)
+        const recordTypes = ['A', 'CNAME', 'TXT', 'MX', 'NS', 'CAA'];
         
         for (const type of recordTypes) {
             try {
@@ -744,6 +754,16 @@ class DNSAnalyzer {
             console.warn('Failed to query DKIM records:', error);
         }
 
+        // Query SRV records for service discovery
+        try {
+            const srvRecords = await this.querySRVRecords(domain);
+            if (srvRecords.length > 0) {
+                results.records['SRV'] = srvRecords;
+            }
+        } catch (error) {
+            console.warn('Failed to query SRV records:', error);
+        }
+
         return results;
     }
 
@@ -753,31 +773,60 @@ class DNSAnalyzer {
         
         console.log(`🔍 Querying multiple sources for subdomains of ${domain}`);
         
-        // Query reliable sources in parallel (removed CORS-problematic APIs)
-        const promises = [
-            this.queryCrtSh(domain),
-            this.queryCertSpotter(domain),
-            this.queryOTX(domain),
-            this.queryHackerTarget(domain)
+        // Define API sources with individual timeouts
+        const apiSources = [
+            { name: 'crt.sh', method: () => this.queryCrtSh(domain), timeout: 30000 },
+            { name: 'Cert Spotter', method: () => this.queryCertSpotter(domain), timeout: 20000 },
+            { name: 'OTX AlienVault', method: () => this.queryOTX(domain), timeout: 25000 },
+            { name: 'HackerTarget', method: () => this.queryHackerTarget(domain), timeout: 15000 }
         ];
+        
+        // Track API statuses for detailed reporting
+        this.ctApiStatuses = {
+            completed: [],
+            timeout: [],
+            failed: []
+        };
+        
+        // Create promises with individual timeouts
+        const promises = apiSources.map(source => {
+            const timeoutPromise = new Promise((_, reject) => 
+                setTimeout(() => reject(new Error(`${source.name} timeout after ${source.timeout/1000}s`)), source.timeout)
+            );
+            
+            return Promise.race([source.method(), timeoutPromise])
+                .then(result => ({ source: source.name, status: 'fulfilled', data: result }))
+                .catch(error => ({ source: source.name, status: 'rejected', error: error.message }));
+        });
         
         try {
             const results = await Promise.allSettled(promises);
             
-            // Process results from each source
-            const sources = ['crt.sh', 'Cert Spotter', 'OTX AlienVault', 'HackerTarget'];
-            
-            for (let i = 0; i < results.length; i++) {
-                if (results[i].status === 'fulfilled') {
-                    const sourceSubdomains = results[i].value;
-                    console.log(`✅ Found ${sourceSubdomains.length} subdomains from ${sources[i]}`);
-                    sourceSubdomains.forEach(sub => subdomains.add(sub));
+            // Process results and track API statuses
+            for (const result of results) {
+                if (result.status === 'fulfilled') {
+                    const apiResult = result.value;
+                    if (apiResult.status === 'fulfilled') {
+                        const sourceSubdomains = apiResult.data;
+                        console.log(`✅ Found ${sourceSubdomains.length} subdomains from ${apiResult.source}`);
+                        sourceSubdomains.forEach(sub => subdomains.add(sub));
+                        this.ctApiStatuses.completed.push(apiResult.source);
+                    } else {
+                        console.log(`❌ ${apiResult.source} failed:`, apiResult.error);
+                        if (apiResult.error.includes('timeout')) {
+                            this.ctApiStatuses.timeout.push(apiResult.source);
+                        } else {
+                            this.ctApiStatuses.failed.push(apiResult.source);
+                        }
+                    }
                 } else {
-                    console.log(`❌ ${sources[i]} failed:`, results[i].reason);
+                    console.log(`❌ API call failed:`, result.reason);
+                    this.ctApiStatuses.failed.push('Unknown API');
                 }
             }
             
             console.log(`📊 Total unique subdomains found: ${subdomains.size}`);
+            console.log(`📊 API Status - Completed: ${this.ctApiStatuses.completed.length}, Timeout: ${this.ctApiStatuses.timeout.length}, Failed: ${this.ctApiStatuses.failed.length}`);
             
         } catch (error) {
             console.log(`❌ Subdomain discovery query failed:`, error);
@@ -1375,6 +1424,193 @@ class DNSAnalyzer {
         }
         
         return null;
+    }
+
+    // Query SRV records using comprehensive service patterns
+    async querySRVRecords(domain) {
+        const srvRecords = [];
+        
+        // Comprehensive list of common SRV service patterns
+        const srvServices = [
+            // Communication Services
+            '_sip._tcp', '_sip._udp', '_sips._tcp',
+            '_xmpp-server._tcp', '_xmpp-client._tcp',
+            '_jabber._tcp', '_jabber-client._tcp',
+            
+            // Email Services
+            '_submission._tcp', '_imap._tcp', '_imaps._tcp',
+            '_pop3._tcp', '_pop3s._tcp', '_smtp._tcp',
+            
+            // Enterprise/Directory Services
+            '_ldap._tcp', '_ldaps._tcp', '_ldap._udp',
+            '_kerberos._tcp', '_kerberos._udp', '_kpasswd._tcp',
+            '_kerberos-master._tcp', '_kerberos-adm._tcp',
+            
+            // Calendar and Contact Services
+            '_caldav._tcp', '_caldavs._tcp', '_carddav._tcp', '_carddavs._tcp',
+            
+            // Microsoft Services
+            '_autodiscover._tcp', '_msrpc._tcp', '_gc._tcp',
+            '_kerberos-iv._udp', '_ldap._msdcs',
+            
+            // File Transfer Services
+            '_ftp._tcp', '_ftps._tcp', '_sftp._tcp',
+            
+            // Voice/Video Services
+            '_h323cs._tcp', '_h323be._tcp', '_h323ls._tcp',
+            '_sip._tls', '_turn._tcp', '_turn._udp',
+            '_stun._tcp', '_stun._udp',
+            
+            // Web Services
+            '_http._tcp', '_https._tcp', '_www._tcp',
+            '_webdav._tcp', '_webdavs._tcp',
+            
+            // Database Services
+            '_mysql._tcp', '_pgsql._tcp', '_mongodb._tcp',
+            
+            // Messaging Services
+            '_matrix._tcp', '_matrix-fed._tcp',
+            '_irc._tcp', '_ircs._tcp',
+            
+            // Network Services
+            '_ntp._udp', '_snmp._udp', '_tftp._udp',
+            '_dns._tcp', '_dns._udp',
+            
+            // Printing Services
+            '_ipp._tcp', '_ipps._tcp', '_printer._tcp',
+            
+            // Discovery Services
+            '_device-info._tcp', '_workstation._tcp',
+            '_adisk._tcp', '_afpovertcp._tcp',
+            
+            // Game Services
+            '_minecraft._tcp', '_teamspeak._udp',
+            
+            // IoT/Smart Home
+            '_homekit._tcp', '_hap._tcp', '_airplay._tcp'
+        ];
+
+        console.log(`🔍 Querying SRV records for ${domain} using ${srvServices.length} service patterns...`);
+        
+        // Query each SRV service pattern
+        for (const service of srvServices) {
+            try {
+                const srvSubdomain = `${service}.${domain}`;
+                console.log(`  📡 Checking SRV service: ${srvSubdomain}`);
+                
+                const records = await this.queryDNS(srvSubdomain, 'SRV');
+                if (records && records.length > 0) {
+                    for (const record of records) {
+                        // Parse SRV record data: priority weight port target
+                        const srvInfo = this.parseSRVRecord(record.data, service, srvSubdomain);
+                        if (srvInfo) {
+                            const enhancedRecord = {
+                                ...record,
+                                service: service,
+                                subdomain: srvSubdomain,
+                                parsedInfo: srvInfo
+                            };
+                            
+                            srvRecords.push(enhancedRecord);
+                            console.log(`  ✅ Found SRV record for '${service}':`, srvInfo);
+                        }
+                    }
+                }
+            } catch (error) {
+                // Silently continue - most SRV services won't exist
+                console.log(`    ⚠️  SRV service '${service}' not found (normal)`);
+            }
+        }
+        
+        console.log(`📊 Found ${srvRecords.length} SRV records for ${domain}`);
+        return srvRecords;
+    }
+
+    // Parse SRV record and extract service information
+    parseSRVRecord(data, service, subdomain) {
+        // SRV record format: priority weight port target
+        const parts = data.trim().split(/\s+/);
+        if (parts.length < 4) return null;
+        
+        const info = {
+            service: service,
+            subdomain: subdomain,
+            priority: parseInt(parts[0]) || 0,
+            weight: parseInt(parts[1]) || 0,
+            port: parseInt(parts[2]) || 0,
+            target: parts[3].replace(/\.$/, ''),
+            serviceType: this.identifyServiceType(service),
+            description: this.getSRVServiceDescription(service)
+        };
+
+        return info;
+    }
+
+    // Identify service type from SRV service name
+    identifyServiceType(service) {
+        const lowerService = service.toLowerCase();
+        
+        // Communication services
+        if (lowerService.includes('sip') || lowerService.includes('xmpp') || lowerService.includes('jabber')) {
+            return { name: 'Communication', category: 'communication', description: 'Voice/messaging communication service' };
+        }
+        
+        // Email services
+        if (lowerService.includes('imap') || lowerService.includes('pop3') || lowerService.includes('smtp') || lowerService.includes('submission')) {
+            return { name: 'Email', category: 'email', description: 'Email service' };
+        }
+        
+        // Directory services
+        if (lowerService.includes('ldap') || lowerService.includes('kerberos')) {
+            return { name: 'Directory', category: 'directory', description: 'Directory/authentication service' };
+        }
+        
+        // Calendar/Contact services
+        if (lowerService.includes('caldav') || lowerService.includes('carddav')) {
+            return { name: 'Calendar/Contacts', category: 'productivity', description: 'Calendar and contact synchronization service' };
+        }
+        
+        // Microsoft services
+        if (lowerService.includes('autodiscover') || lowerService.includes('msrpc') || lowerService.includes('_gc')) {
+            return { name: 'Microsoft', category: 'microsoft', description: 'Microsoft enterprise service' };
+        }
+        
+        // File transfer
+        if (lowerService.includes('ftp') || lowerService.includes('sftp')) {
+            return { name: 'File Transfer', category: 'file-transfer', description: 'File transfer service' };
+        }
+        
+        // Web services
+        if (lowerService.includes('http') || lowerService.includes('www') || lowerService.includes('webdav')) {
+            return { name: 'Web', category: 'web', description: 'Web service' };
+        }
+        
+        // Default
+        return { name: 'Other Service', category: 'other', description: 'Service discovered via SRV record' };
+    }
+
+    // Get description for SRV service
+    getSRVServiceDescription(service) {
+        const descriptions = {
+            '_sip._tcp': 'SIP (Session Initiation Protocol) for VoIP over TCP',
+            '_sip._udp': 'SIP (Session Initiation Protocol) for VoIP over UDP',
+            '_sips._tcp': 'Secure SIP for encrypted VoIP',
+            '_xmpp-server._tcp': 'XMPP server-to-server communication',
+            '_xmpp-client._tcp': 'XMPP client connections',
+            '_submission._tcp': 'Email submission service',
+            '_imap._tcp': 'IMAP email access',
+            '_imaps._tcp': 'Secure IMAP email access',
+            '_ldap._tcp': 'LDAP directory service',
+            '_ldaps._tcp': 'Secure LDAP directory service',
+            '_kerberos._tcp': 'Kerberos authentication service',
+            '_caldav._tcp': 'Calendar synchronization service',
+            '_carddav._tcp': 'Contact synchronization service',
+            '_autodiscover._tcp': 'Microsoft Exchange autodiscovery',
+            '_matrix._tcp': 'Matrix messaging protocol',
+            '_minecraft._tcp': 'Minecraft game server'
+        };
+        
+        return descriptions[service] || `Service discovery record for ${service}`;
     }
 
     // Get ASN information for IP with multiple fallback sources - Enhanced for Data Sovereignty Analysis

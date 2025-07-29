@@ -217,6 +217,16 @@ class ServiceDetectionEngine {
         this.processRecordType(records.CNAME, 'cnamePatterns', 'CNAME', detectedServices);
         this.processRecordType(records.NS, 'nsPatterns', 'NS', detectedServices);
 
+        // Process CAA records to detect certificate authority trust relationships
+        if (records.CAA && domainBeingAnalyzed) {
+            this.processCAARecords(records.CAA, detectedServices, domainBeingAnalyzed);
+        }
+
+        // Process SRV records to detect service dependencies
+        if (records.SRV && domainBeingAnalyzed) {
+            this.processSRVRecords(records.SRV, detectedServices, domainBeingAnalyzed);
+        }
+
         // Process TXT records for service detection (but exclude DNS policy records)
         if (records.TXT) {
             const filteredTXT = records.TXT.filter(record => {
@@ -331,6 +341,53 @@ class ServiceDetectionEngine {
                         category: 'email-security'
                     });
                 }
+            }
+        }
+
+        // Process CAA records
+        if (records.CAA) {
+            for (const record of records.CAA) {
+                const caaInfo = this.parseCAARecord(record.data) || {};
+                const caName = this.identifyKnownCA(caaInfo.value) || caaInfo.value;
+                
+                dnsRecords.push({
+                    type: 'CAA',
+                    name: 'Certificate Authority Authorization',
+                    description: `Certificate issuance authorization - ${caaInfo.tag === 'issue' ? 'Standard' : caaInfo.tag === 'issuewild' ? 'Wildcard' : 'Reporting'} record`,
+                    data: record.data,
+                    record: record,
+                    category: 'certificate-security',
+                    parsed: {
+                        flags: caaInfo.flags || 0,
+                        tag: caaInfo.tag || 'unknown',
+                        authority: caName,
+                        isKnownCA: !!this.identifyKnownCA(caaInfo.value)
+                    }
+                });
+            }
+        }
+
+        // Process SRV records
+        if (records.SRV) {
+            for (const record of records.SRV) {
+                const srvInfo = record.parsedInfo || {};
+                
+                dnsRecords.push({
+                    type: 'SRV',
+                    name: 'Service Discovery Record',
+                    description: `Service discovery - ${srvInfo.description || 'Service location record'}`,
+                    data: record.data,
+                    record: record,
+                    category: 'service-discovery',
+                    parsed: {
+                        service: srvInfo.service || 'unknown',
+                        target: srvInfo.target || 'unknown',
+                        port: srvInfo.port || 0,
+                        priority: srvInfo.priority || 0,
+                        weight: srvInfo.weight || 0,
+                        serviceType: srvInfo.serviceType?.name || 'Unknown Service'
+                    }
+                });
             }
         }
 
@@ -614,6 +671,175 @@ class ServiceDetectionEngine {
         
         // Return null for unknown services (don't create generic names)
         return null;
+    }
+
+    // Process CAA records to detect certificate authority trust relationships
+    processCAARecords(caaRecords, detectedServices, domainBeingAnalyzed) {
+        console.log(`🔍 Processing ${caaRecords.length} CAA records for domain: ${domainBeingAnalyzed}`);
+        
+        for (const record of caaRecords) {
+            const caaData = record.data;
+            console.log(`🔒 Checking CAA record: ${caaData}`);
+            
+            // Parse CAA record: flags tag value
+            const caaInfo = this.parseCAARecord(caaData);
+            if (caaInfo && caaInfo.tag === 'issue' || caaInfo.tag === 'issuewild') {
+                // This CAA record indicates a trusted certificate authority
+                const caName = this.identifyKnownCA(caaInfo.value);
+                const isKnownCA = caName !== null;
+                
+                // Create clear service name that emphasizes trust relationship
+                const serviceName = isKnownCA 
+                    ? `${caName} (Trusted Certificate Authority)` 
+                    : `Certificate Authority (${caaInfo.value})`;
+                
+                const serviceDescription = isKnownCA
+                    ? `Authorized certificate authority - Domain trusts ${caName} to issue ${caaInfo.tag === 'issuewild' ? 'wildcard ' : ''}certificates`
+                    : `Authorized certificate authority - Domain trusts ${caaInfo.value} to issue ${caaInfo.tag === 'issuewild' ? 'wildcard ' : ''}certificates`;
+                
+                console.log(`🚨 Found certificate authority trust relationship: ${serviceName}`);
+                
+                this.addOrUpdateService(
+                    detectedServices, 
+                    serviceName, 
+                    {
+                        description: serviceDescription,
+                        certificateAuthority: caaInfo.value,
+                        flags: caaInfo.flags,
+                        tag: caaInfo.tag,
+                        isKnownCA: isKnownCA,
+                        isTrustRelationship: true,
+                        securityImplication: `Domain explicitly trusts this CA to issue ${caaInfo.tag === 'issuewild' ? 'wildcard ' : ''}SSL certificates`
+                    }, 
+                    'security', 
+                    record, 
+                    'CAA'
+                );
+            } else if (caaInfo && caaInfo.tag === 'iodef') {
+                // CAA violation reporting endpoint
+                const serviceName = `CAA Violation Reporting (${caaInfo.value})`;
+                const serviceDescription = `Certificate authority violation reporting - Security incidents reported to ${caaInfo.value}`;
+                
+                console.log(`📧 Found CAA violation reporting: ${serviceName}`);
+                
+                this.addOrUpdateService(
+                    detectedServices, 
+                    serviceName, 
+                    {
+                        description: serviceDescription,
+                        reportingEndpoint: caaInfo.value,
+                        flags: caaInfo.flags,
+                        tag: caaInfo.tag,
+                        isReportingService: true,
+                        securityImplication: 'Certificate authority violations will be reported to this endpoint'
+                    }, 
+                    'security', 
+                    record, 
+                    'CAA'
+                );
+            }
+        }
+    }
+
+    // Parse CAA record data
+    parseCAARecord(data) {
+        // CAA record format: flags tag "value"
+        const parts = data.trim().split(/\s+/);
+        if (parts.length < 3) return null;
+        
+        const flags = parseInt(parts[0]) || 0;
+        const tag = parts[1].toLowerCase();
+        // Join remaining parts and remove quotes
+        const value = parts.slice(2).join(' ').replace(/^["']|["']$/g, '');
+        
+        return {
+            flags: flags,
+            tag: tag,
+            value: value
+        };
+    }
+
+    // Identify known certificate authorities by domain
+    identifyKnownCA(domain) {
+        const knownCAs = {
+            'letsencrypt.org': 'Let\'s Encrypt',
+            'digicert.com': 'DigiCert',
+            'sectigo.com': 'Sectigo',
+            'comodo.com': 'Comodo',
+            'godaddy.com': 'GoDaddy',
+            'globalsign.com': 'GlobalSign',
+            'entrust.com': 'Entrust',
+            'thawte.com': 'Thawte',
+            'verisign.com': 'VeriSign',
+            'geotrust.com': 'GeoTrust',
+            'rapidssl.com': 'RapidSSL',
+            'ssl.com': 'SSL.com',
+            'trustwave.com': 'Trustwave',
+            'buypass.com': 'Buypass',
+            'startssl.com': 'StartSSL',
+            'wosign.com': 'WoSign',
+            'certum.eu': 'Certum',
+            'actalis.it': 'Actalis',
+            'izenpe.com': 'Izenpe',
+            'quovadis.com': 'QuoVadis',
+            'amazon.com': 'Amazon Trust Services',
+            'cloudflare.com': 'Cloudflare',
+            'google.com': 'Google Trust Services',
+            'microsoft.com': 'Microsoft',
+            'apple.com': 'Apple'
+        };
+        
+        // Check for exact domain match
+        if (knownCAs[domain]) {
+            return knownCAs[domain];
+        }
+        
+        // Check for subdomain matches
+        for (const [caDomain, caName] of Object.entries(knownCAs)) {
+            if (domain.endsWith(caDomain)) {
+                return caName;
+            }
+        }
+        
+        // Return null for unknown CAs (don't create generic names)
+        return null;
+    }
+
+    // Process SRV records to detect service dependencies
+    processSRVRecords(srvRecords, detectedServices, domainBeingAnalyzed) {
+        console.log(`🔍 Processing ${srvRecords.length} SRV records for domain: ${domainBeingAnalyzed}`);
+        
+        for (const record of srvRecords) {
+            const srvInfo = record.parsedInfo;
+            if (!srvInfo) continue;
+            
+            console.log(`🔧 Processing SRV service: ${srvInfo.service} → ${srvInfo.target}`);
+            
+            // Create service name based on the discovered service
+            const serviceName = `${srvInfo.serviceType.name} Service (${srvInfo.service})`;
+            const serviceDescription = `${srvInfo.description} - Target: ${srvInfo.target}:${srvInfo.port}`;
+            
+            console.log(`🚨 Found SRV service dependency: ${serviceName}`);
+            
+            this.addOrUpdateService(
+                detectedServices, 
+                serviceName, 
+                {
+                    description: serviceDescription,
+                    target: srvInfo.target,
+                    port: srvInfo.port,
+                    priority: srvInfo.priority,
+                    weight: srvInfo.weight,
+                    servicePattern: srvInfo.service,
+                    serviceCategory: srvInfo.serviceType.category,
+                    isServiceDiscovery: true,
+                    securityImplication: `Service accessible via SRV record discovery on ${srvInfo.target}:${srvInfo.port}`
+                }, 
+                'other', // As requested, classify SRV services under "Other services"
+                record, 
+                'SRV'
+            );
+        }
     }
 
     // Enhanced ASN-based vendor classification
