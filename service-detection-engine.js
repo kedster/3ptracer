@@ -768,21 +768,36 @@ class ServiceDetectionEngine {
                     }
                 }
             }
-            
-            // Interesting pattern detection (only for active subdomains)
+
             for (const pattern of interestingPatterns) {
-                if (subdomain.subdomain.includes(pattern)) {
-                    findings.push({
-                        type: 'interesting_subdomain',
-                        risk: 'info',
-                        description: `Interesting subdomain pattern: ${pattern}`,
-                        recommendation: 'Explore this subdomain for potential insights (pattern-based detection only)',
-                        subdomain: subdomain.subdomain,
-                        pattern: pattern,
-                        ip: subdomainIP || 'Active subdomain'
-                    });
+                const fullDomain = subdomain.subdomain;
+                
+                if (fullDomain) {
+                    // Extract subdomain part by removing domain.tld (last 2 parts)
+                    const parts = fullDomain.split('.');
+                    
+                    if (parts.length > 2) {
+                        // Get everything except the last 2 parts (domain + TLD)
+                        const subdomainPart = parts.slice(0, -2).join('.');
+                        
+                        // Check pattern only in the actual subdomain part
+                        const regex = new RegExp(`(^|\\.|-)${pattern}(\\.|$|-|$)`, 'i');
+                        
+                        if (regex.test(subdomainPart)) {
+                            findings.push({
+                                type: 'interesting_subdomain',
+                                risk: 'info',
+                                description: `Interesting subdomain pattern: ${pattern}`,
+                                recommendation: 'Explore this subdomain for potential insights (pattern-based detection only)',
+                                subdomain: fullDomain,
+                                pattern: pattern,
+                                ip: subdomainIP || 'Active subdomain'
+                            });
+                        }
+                    }
                 }
             }
+            
         }
         
         console.log(`🔍 Interesting findings analysis: ${activeSubdomains.length} active subdomains analyzed, ${findings.length} findings discovered`);
