@@ -176,21 +176,17 @@ class AnalysisController {
         this.addAPINotification('Certificate Transparency', 'Querying crt.sh and other CT logs (may take 30-90 seconds)...', 'info');
         
         try {
-            // Add timeout to prevent indefinite waiting - increased from 45s to 90s for better reliability
-            const timeoutPromise = new Promise((_, reject) => 
-                setTimeout(() => reject(new Error('Subdomain discovery timeout')), 90000) // 90 second timeout
-            );
+            // Use the new optimized discovery approach
+            const subdomains = await this.dnsAnalyzer.getSubdomainsFromCT(domain);
             
-            const discoveryPromise = this.dnsAnalyzer.getSubdomainsFromCT(domain);
+            // Get final stats from discovery queue
+            const discoveryStats = this.dnsAnalyzer.discoveryQueue.getStats();
             
-            // Race between discovery and timeout
-            const subdomains = await Promise.race([discoveryPromise, timeoutPromise]);
-            
-            this.uiRenderer.updateProgress(35, `Found ${subdomains.length} potential subdomains`);
-            this.addAPINotification('Subdomain Discovery', `Found ${subdomains.length} subdomains from Certificate Transparency logs`, 'success');
+            this.uiRenderer.updateProgress(35, `Found ${discoveryStats.total} subdomains, processed ${discoveryStats.processed}`);
+            this.addAPINotification('Subdomain Discovery', `Found ${discoveryStats.total} subdomains from Certificate Transparency logs`, 'success');
             
             this.debug.logJSON('Subdomains discovered:', subdomains);
-            console.log(`✅ Found ${subdomains.length} subdomains`);
+            console.log(`✅ Found and processed ${subdomains.length} subdomains`);
             
             return subdomains;
             
@@ -269,22 +265,19 @@ class AnalysisController {
             return [];
         }
 
-        // Update progress
-        this.uiRenderer.updateProgress(45, `Analyzing ${subdomains.length} subdomains...`);
-        this.addAPINotification('DNS Analysis', `Starting analysis of ${subdomains.length} discovered subdomains...`, 'info');
-        
-        // Analyze subdomains
-        const results = await this.dnsAnalyzer.analyzeSubdomains(subdomains);
+        // With the new discovery queue approach, subdomains are already processed
+        // Just return them directly since they're already analyzed
+        console.log(`✅ Subdomains already processed via discovery queue, returning ${subdomains.length} results`);
         
         // Show progressive results with subdomains
-        this.uiRenderer.updateProgress(60, `Analyzed ${results.length} subdomains, updating display...`);
-        await this.displayProgressiveResults(mainDomainResults, results, [], {});
+        this.uiRenderer.updateProgress(60, `Returning ${subdomains.length} processed subdomains...`);
+        await this.displayProgressiveResults(mainDomainResults, subdomains, [], {});
         
-        this.addAPINotification('DNS Analysis', `Completed analysis of ${results.length} subdomains`, 'success');
-        this.debug.logJSON('Subdomain analysis results:', results);
-        console.log(`✅ Subdomain analysis complete: ${results.length} results`);
+        this.addAPINotification('DNS Analysis', `Completed analysis of ${subdomains.length} subdomains`, 'success');
+        this.debug.logJSON('Subdomain analysis results:', subdomains);
+        console.log(`✅ Subdomain analysis complete: ${subdomains.length} results`);
         
-        return results;
+        return subdomains;
     }
 
     // Enrich subdomain results with ASN information

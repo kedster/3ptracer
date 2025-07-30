@@ -1,3 +1,79 @@
+// Discovery Queue - Centralized subdomain discovery and processing management
+class DiscoveryQueue {
+    constructor() {
+        this.discoveredSubdomains = new Map(); // subdomain -> {sources: [], status: 'discovered'}
+        this.processingQueue = []; // Array of subdomains to process
+        this.results = new Map(); // subdomain -> analysis results
+        this.stats = {
+            discovered: 0,
+            processed: 0,
+            total: 0
+        };
+    }
+    
+    addDiscovered(subdomain, source) {
+        if (!this.discoveredSubdomains.has(subdomain)) {
+            this.discoveredSubdomains.set(subdomain, {
+                sources: [source],
+                status: 'discovered',
+                discoveredAt: new Date()
+            });
+            this.processingQueue.push(subdomain);
+            this.stats.discovered++;
+            console.log(`🆕 Added to discovery queue: ${subdomain} (from ${source})`);
+        } else {
+            // Add source to existing entry
+            const entry = this.discoveredSubdomains.get(subdomain);
+            if (!entry.sources.includes(source)) {
+                entry.sources.push(source);
+                console.log(`📝 Added source ${source} to existing subdomain: ${subdomain}`);
+            }
+        }
+    }
+    
+    getNextToProcess() {
+        return this.processingQueue.shift(); // FIFO processing
+    }
+    
+    markCompleted(subdomain, results) {
+        this.results.set(subdomain, results);
+        this.stats.processed++;
+        console.log(`✅ Completed processing: ${subdomain}`);
+    }
+    
+    getProgress() {
+        return {
+            discovered: this.stats.discovered,
+            processed: this.stats.processed,
+            remaining: this.processingQueue.length,
+            total: this.discoveredSubdomains.size
+        };
+    }
+    
+    getResults() {
+        return Array.from(this.results.values());
+    }
+    
+    getStats() {
+        return {
+            ...this.stats,
+            remaining: this.processingQueue.length,
+            total: this.discoveredSubdomains.size
+        };
+    }
+    
+    clear() {
+        this.discoveredSubdomains.clear();
+        this.processingQueue = [];
+        this.results.clear();
+        this.stats = {
+            discovered: 0,
+            processed: 0,
+            total: 0
+        };
+    }
+}
+
 // DNS Analyzer Module
 class DNSAnalyzer {
     constructor() {
@@ -35,8 +111,8 @@ class DNSAnalyzer {
         // Historical records tracking
         this.historicalRecords = [];
         
-        // Wildcard certificates tracking
-        this.wildcardCertificates = [];
+        // NEW: Discovery queue for centralized management
+        this.discoveryQueue = new DiscoveryQueue();
         
         // Callbacks for real-time notifications
         this.subdomainCallbacks = [];
@@ -70,7 +146,7 @@ class DNSAnalyzer {
         this.processedSubdomains.clear();
         this.processedSubdomainResults.clear();
         this.historicalRecords = [];
-        this.wildcardCertificates = []; // Clear historical records
+        this.discoveryQueue.clear(); // Clear discovery queue
         this.subdomainCallbacks = [];
         this.apiCallbacks = [];
         this.currentDomain = null;
@@ -141,17 +217,15 @@ class DNSAnalyzer {
     
     // Get processed subdomain results
     getProcessedSubdomainResults() {
-        const results = [];
-        for (const [subdomain, result] of this.processedSubdomainResults) {
-            results.push(result);
-        }
-        return results;
+        return this.discoveryQueue.getResults();
     }
 
-    // Get Certificate Transparency API statuses for detailed reporting
+    // Get CT API statuses for detailed reporting
     getCTApiStatuses() {
-        return this.ctApiStatuses || {
-            completed: [],
+        // For now, return a simple structure since we're not tracking individual API statuses
+        // This can be enhanced later to track actual API performance
+        return {
+            completed: ['Discovery Queue'],
             timeout: [],
             failed: []
         };
@@ -850,101 +924,90 @@ class DNSAnalyzer {
 
     // Get subdomains from multiple sources (real-time version)
     async getSubdomainsFromCT(domain) {
-        const subdomains = new Set();
+        console.log(`🔍 Starting optimized subdomain discovery for ${domain}`);
         
-        console.log(`🔍 Querying multiple sources for subdomains of ${domain}`);
-        
-        // Define API sources with individual timeouts
-        const apiSources = [
-            { name: 'crt.sh', method: () => this.queryCrtSh(domain), timeout: 30000 },
-            { name: 'Cert Spotter', method: () => this.queryCertSpotter(domain), timeout: 20000 },
-            { name: 'OTX AlienVault', method: () => this.queryOTX(domain), timeout: 25000 },
-            { name: 'HackerTarget', method: () => this.queryHackerTarget(domain), timeout: 15000 }
+        // Phase 1: Start ALL sources in parallel (no waiting)
+        const discoveryPromises = [
+            this.queryCrtSh(domain),
+            this.queryOTX(domain),
+            this.queryHackerTarget(domain),
+            this.queryCertSpotter(domain)
         ];
         
-        // Track API statuses for detailed reporting
-        this.ctApiStatuses = {
-            completed: [],
-            timeout: [],
-            failed: []
-        };
-        
-        // Create promises with individual timeouts
-        const promises = apiSources.map(source => {
-            const timeoutPromise = new Promise((_, reject) => 
-                setTimeout(() => reject(new Error(`${source.name} timeout after ${source.timeout/1000}s`)), source.timeout)
-            );
-            
-            return Promise.race([source.method(), timeoutPromise])
-                .then(result => ({ source: source.name, status: 'fulfilled', data: result }))
-                .catch(error => ({ source: source.name, status: 'rejected', error: error.message }));
-        });
+        // Phase 2: Wait for all sources with timeout
+        const timeoutPromise = new Promise((_, reject) => 
+            setTimeout(() => reject(new Error('Discovery timeout')), 90000)
+        );
         
         try {
-            const results = await Promise.allSettled(promises);
-            
-            // Process results and track API statuses
-            for (const result of results) {
-                if (result.status === 'fulfilled') {
-                    const apiResult = result.value;
-                    if (apiResult.status === 'fulfilled') {
-                        const sourceSubdomains = apiResult.data;
-                        console.log(`✅ Found ${sourceSubdomains.length} subdomains from ${apiResult.source}`);
-                        sourceSubdomains.forEach(sub => subdomains.add(sub));
-                        this.ctApiStatuses.completed.push(apiResult.source);
-                    } else {
-                        console.log(`❌ ${apiResult.source} failed:`, apiResult.error);
-                        if (apiResult.error.includes('timeout')) {
-                            this.ctApiStatuses.timeout.push(apiResult.source);
-                        } else {
-                            this.ctApiStatuses.failed.push(apiResult.source);
-                        }
-                    }
-                } else {
-                    console.log(`❌ API call failed:`, result.reason);
-                    this.ctApiStatuses.failed.push('Unknown API');
-                }
-            }
-            
-            console.log(`📊 Total unique subdomains found: ${subdomains.size}`);
-            console.log(`📊 API Status - Completed: ${this.ctApiStatuses.completed.length}, Timeout: ${this.ctApiStatuses.timeout.length}, Failed: ${this.ctApiStatuses.failed.length}`);
-            
+            await Promise.race([
+                Promise.allSettled(discoveryPromises),
+                timeoutPromise
+            ]);
         } catch (error) {
-            console.log(`❌ Subdomain discovery query failed:`, error);
+            console.warn(`⚠️ Discovery timeout: ${error.message}`);
         }
         
-        // If no subdomains found from sources, try common subdomain patterns
-        if (subdomains.size === 0) {
-            console.log(`🔍 No subdomains found from sources, trying common patterns...`);
-            const commonSubdomains = [
-                'www', 'mail', 'ftp', 'admin', 'blog', 'api', 'dev', 'test', 
-                'staging', 'cdn', 'static', 'assets', 'img', 'images', 'media',
-                'support', 'help', 'docs', 'wiki', 'forum', 'shop', 'store'
-            ];
-            
-            for (const sub of commonSubdomains) {
-                const subdomain = `${sub}.${domain}`;
-                try {
-                    console.log(`  📡 Checking common subdomain: ${subdomain}`);
-                    const records = await this.queryDNS(subdomain, 'A');
-                    if (records && records.length > 0) {
-                        subdomains.add(subdomain);
-                        console.log(`  ✅ Found common subdomain: ${subdomain}`);
-                        // Process immediately when discovered
-                        this.notifySubdomainDiscovered(subdomain, 'Common Patterns');
-                        this.processSubdomainImmediately(subdomain, 'Common Patterns');
-                    }
-                } catch (error) {
-                    // Silently continue - this is expected for most common subdomains
-                }
-            }
-            
-            console.log(`✅ Found ${subdomains.size} subdomains from common patterns`);
-        }
-        
-        return Array.from(subdomains);
+        // Phase 3: Process everything from unified queue
+        return this.processDiscoveryQueue();
     }
-
+    
+    // Process discovery queue sequentially
+    async processDiscoveryQueue() {
+        const results = [];
+        const total = this.discoveryQueue.discoveredSubdomains.size;
+        
+        console.log(`⚡ Processing ${total} discovered subdomains sequentially...`);
+        
+        while (this.discoveryQueue.processingQueue.length > 0) {
+            const subdomain = this.discoveryQueue.getNextToProcess();
+            
+            // Update progress via callbacks
+            const progress = this.discoveryQueue.getProgress();
+            this.notifyProgressUpdate(progress);
+            
+            try {
+                // Process single subdomain
+                const result = await this.analyzeSingleSubdomain(subdomain);
+                this.discoveryQueue.markCompleted(subdomain, result);
+                results.push(result);
+                
+                // Notify about completion
+                this.subdomainCallbacks.forEach(callback => {
+                    try {
+                        callback(subdomain, 'Sequential Processing', result);
+                    } catch (error) {
+                        console.warn('Subdomain callback error:', error);
+                    }
+                });
+                
+            } catch (error) {
+                console.warn(`❌ Failed to process ${subdomain}:`, error.message);
+                this.discoveryQueue.markCompleted(subdomain, {
+                    subdomain: subdomain,
+                    status: 'error',
+                    error: error.message
+                });
+            }
+        }
+        
+        console.log(`✅ Processed ${results.length} subdomains from discovery queue`);
+        return results;
+    }
+    
+    // Notify progress updates
+    notifyProgressUpdate(progress) {
+        this.apiCallbacks.forEach(callback => {
+            try {
+                callback('Discovery Progress', 'info', 
+                    `Processing: ${progress.processed}/${progress.total} subdomains (${progress.remaining} remaining)`
+                );
+            } catch (error) {
+                console.warn('Progress callback error:', error);
+            }
+        });
+    }
+    
     // Query crt.sh for subdomains
     async queryCrtSh(domain) {
         console.log(`  📡 Querying crt.sh for subdomains...`);
@@ -978,64 +1041,26 @@ class DNSAnalyzer {
                 this.notifyAPIStatus('crt.sh', 'error', errorMsg);
                 throw new Error(`CT query failed: ${response.status}`);
             }
-
-        const certificates = await response.json();
-        const subdomains = new Set();
-        
-        for (const cert of certificates) {
-            if (cert.name_value) {
-                const names = cert.name_value.split(/\n|,/);
-                for (const name of names) {
-                    const cleanName = name.trim().toLowerCase();
-                    
-                    // Filter out invalid subdomains
-                    if (cleanName.endsWith(`.${domain}`) && 
-                        cleanName !== domain &&
-                        !cleanName.includes('*') && // Exclude wildcards
-                        !cleanName.startsWith('*.') && // Exclude wildcard patterns
-                        cleanName.length > domain.length + 1 && // Must be actual subdomain
-                        /^[a-z0-9.-]+$/.test(cleanName)) { // Valid characters only
-                        
-                        subdomains.add(cleanName);
-                        console.log(`    ✅ Found subdomain from crt.sh: ${cleanName}`);
-                        
-                        // Store certificate information for historical records
-                        const certInfo = {
-                            subdomain: cleanName,
-                            source: 'crt.sh',
-                            issuer: cert.issuer_name || 'Unknown',
-                            notBefore: cert.not_before || null,
-                            notAfter: cert.not_after || null,
-                            certificateId: cert.id || null
-                        };
-                        
-                        // Process immediately when discovered
-                        this.notifySubdomainDiscovered(cleanName, 'crt.sh');
-                        this.processSubdomainImmediately(cleanName, 'crt.sh', certInfo);
-                    } else if (cleanName.includes('*')) {
-                        console.log(`    🔍 Found wildcard certificate from crt.sh: ${cleanName}`);
-                        // Store wildcard certificate information
-                        const wildcardCertInfo = {
-                            domain: cleanName,
-                            source: 'crt.sh',
-                            issuer: cert.issuer_name || 'Unknown',
-                            notBefore: cert.not_before || null,
-                            notAfter: cert.not_after || null,
-                            certificateId: cert.id || null,
-                            discoveredAt: new Date().toISOString()
-                        };
-                        this.wildcardCertificates.push(wildcardCertInfo);
-                    }
+            
+            const data = await response.json();
+            console.log(`    📊 crt.sh returned ${data.length} entries`);
+            
+            // Process entries and add to discovery queue
+            let addedCount = 0;
+            for (const entry of data) {
+                const subdomain = entry.name_value;
+                if (subdomain && !subdomain.startsWith('*.')) {
+                    this.discoveryQueue.addDiscovered(subdomain, 'crt.sh');
+                    addedCount++;
                 }
             }
-        }
-        
-        this.notifyAPIStatus('crt.sh', 'success', `Found ${subdomains.size} subdomains`);
-        return Array.from(subdomains);
+            
+            console.log(`    ✅ crt.sh: Added ${addedCount} subdomains to discovery queue`);
+            this.notifyAPIStatus('crt.sh', 'success', `Found ${addedCount} subdomains`);
+            
         } catch (error) {
-            const errorMsg = `Network error: ${error.message}`;
-            this.notifyAPIStatus('crt.sh', 'error', errorMsg);
-            throw error;
+            console.log(`    ❌ crt.sh failed:`, error.message);
+            this.notifyAPIStatus('crt.sh', 'error', error.message);
         }
     }
 
@@ -1044,71 +1069,43 @@ class DNSAnalyzer {
         console.log(`  📡 Querying Cert Spotter for subdomains...`);
         this.stats.apiCalls++;
         
-        const response = await fetch(`https://api.certspotter.com/v1/issuances?domain=${domain}&include_subdomains=true&expand=dns_names`, {
-            method: 'GET',
-            headers: {
-                'Accept': 'application/json'
+        try {
+            const response = await fetch(`https://certspotter.com/api/v0/certs?domain=${domain}`, {
+                method: 'GET',
+                headers: {
+                    'Accept': 'application/json'
+                }
+            });
+            
+            if (!response.ok) {
+                const errorMsg = `Service unavailable (${response.status})`;
+                this.notifyAPIStatus('Cert Spotter', 'error', errorMsg);
+                throw new Error(`Cert Spotter query failed: ${response.status}`);
             }
-        });
-        
-        if (!response.ok) {
-            const errorMsg = `Service unavailable (${response.status})`;
-            this.notifyAPIStatus('Cert Spotter', 'error', errorMsg);
-            throw new Error(`Cert Spotter query failed: ${response.status}`);
-        }
-
-        const csData = await response.json();
-        const subdomains = new Set();
-        
-        for (const cert of csData) {
-            if (cert.dns_names) {
-                for (const name of cert.dns_names) {
-                    const cleanName = name.trim().toLowerCase();
-                    
-                    // Filter out invalid subdomains
-                    if (cleanName.endsWith(`.${domain}`) && 
-                        cleanName !== domain &&
-                        !cleanName.includes('*') && // Exclude wildcards
-                        !cleanName.startsWith('*.') && // Exclude wildcard patterns
-                        cleanName.length > domain.length + 1 && // Must be actual subdomain
-                        /^[a-z0-9.-]+$/.test(cleanName)) { // Valid characters only
-                        
-                        subdomains.add(cleanName);
-                        console.log(`    ✅ Found subdomain from Cert Spotter: ${cleanName}`);
-                        
-                        // Store certificate information for historical records
-                        const certInfo = {
-                            subdomain: cleanName,
-                            source: 'Cert Spotter',
-                            issuer: cert.issuer?.name || 'Unknown',
-                            notBefore: cert.not_before || null,
-                            notAfter: cert.not_after || null,
-                            certificateId: cert.id || null
-                        };
-                        
-                        // Process immediately when discovered
-                        this.notifySubdomainDiscovered(cleanName, 'Cert Spotter');
-                        this.processSubdomainImmediately(cleanName, 'Cert Spotter', certInfo);
-                    } else if (cleanName.includes('*')) {
-                        console.log(`    🔍 Found wildcard certificate from Cert Spotter: ${cleanName}`);
-                        // Store wildcard certificate information
-                        const wildcardCertInfo = {
-                            domain: cleanName,
-                            source: 'Cert Spotter',
-                            issuer: cert.issuer?.name || 'Unknown',
-                            notBefore: cert.not_before || null,
-                            notAfter: cert.not_after || null,
-                            certificateId: cert.id || null,
-                            discoveredAt: new Date().toISOString()
-                        };
-                        this.wildcardCertificates.push(wildcardCertInfo);
+            
+            const data = await response.json();
+            console.log(`    📊 Cert Spotter returned ${data.length} certificates`);
+            
+            // Process entries and add to discovery queue
+            let addedCount = 0;
+            for (const cert of data) {
+                if (cert.dns_names) {
+                    for (const dnsName of cert.dns_names) {
+                        if (dnsName.endsWith(`.${domain}`) && dnsName !== domain) {
+                            this.discoveryQueue.addDiscovered(dnsName, 'Cert Spotter');
+                            addedCount++;
+                        }
                     }
                 }
             }
+            
+            console.log(`    ✅ Cert Spotter: Added ${addedCount} subdomains to discovery queue`);
+            this.notifyAPIStatus('Cert Spotter', 'success', `Found ${addedCount} subdomains`);
+            
+        } catch (error) {
+            console.log(`    ❌ Cert Spotter failed:`, error.message);
+            this.notifyAPIStatus('Cert Spotter', 'error', error.message);
         }
-        
-        this.notifyAPIStatus('Cert Spotter', 'success', `Found ${subdomains.size} subdomains`);
-        return Array.from(subdomains);
     }
 
 
@@ -1118,31 +1115,42 @@ class DNSAnalyzer {
         console.log(`  📡 Querying OTX AlienVault for subdomains...`);
         this.stats.apiCalls++;
         
-        const response = await fetch(`https://otx.alienvault.com/api/v1/indicators/domain/${domain}/passive_dns`);
-        
-        if (!response.ok) {
-            const errorMsg = `Service unavailable (${response.status})`;
-            this.notifyAPIStatus('OTX AlienVault', 'error', errorMsg);
-            throw new Error(`OTX query failed: ${response.status}`);
-        }
-
-        const data = await response.json();
-        const subdomains = new Set();
-        
-        if (data.passive_dns) {
-            for (const entry of data.passive_dns) {
-                if (entry.hostname && entry.hostname.endsWith(`.${domain}`) && entry.hostname !== domain) {
-                    subdomains.add(entry.hostname);
-                    console.log(`    ✅ Found subdomain from OTX: ${entry.hostname}`);
-                    // Process immediately when discovered
-                    this.notifySubdomainDiscovered(entry.hostname, 'OTX AlienVault');
-                    this.processSubdomainImmediately(entry.hostname, 'OTX AlienVault');
+        try {
+            const response = await fetch(`https://otx.alienvault.com/api/v1/indicators/domain/${domain}/passive_dns`, {
+                method: 'GET',
+                headers: {
+                    'Accept': 'application/json'
+                }
+            });
+            
+            if (!response.ok) {
+                const errorMsg = `Service unavailable (${response.status})`;
+                this.notifyAPIStatus('OTX AlienVault', 'error', errorMsg);
+                throw new Error(`OTX query failed: ${response.status}`);
+            }
+            
+            const data = await response.json();
+            console.log(`    📊 OTX returned ${data.passive_dns?.length || 0} entries`);
+            
+            // Process entries and add to discovery queue
+            let addedCount = 0;
+            if (data.passive_dns) {
+                for (const entry of data.passive_dns) {
+                    const subdomain = entry.hostname;
+                    if (subdomain && subdomain.endsWith(`.${domain}`) && subdomain !== domain) {
+                        this.discoveryQueue.addDiscovered(subdomain, 'OTX AlienVault');
+                        addedCount++;
+                    }
                 }
             }
+            
+            console.log(`    ✅ OTX: Added ${addedCount} subdomains to discovery queue`);
+            this.notifyAPIStatus('OTX AlienVault', 'success', `Found ${addedCount} subdomains`);
+            
+        } catch (error) {
+            console.log(`    ❌ OTX failed:`, error.message);
+            this.notifyAPIStatus('OTX AlienVault', 'error', error.message);
         }
-        
-        this.notifyAPIStatus('OTX AlienVault', 'success', `Found ${subdomains.size} subdomains`);
-        return Array.from(subdomains);
     }
 
     // Query HackerTarget for subdomains
@@ -1150,35 +1158,46 @@ class DNSAnalyzer {
         console.log(`  📡 Querying HackerTarget for subdomains...`);
         this.stats.apiCalls++;
         
-        const response = await fetch(`https://api.hackertarget.com/hostsearch/?q=${domain}`);
-        
-        if (!response.ok) {
-            const errorMsg = `Service unavailable (${response.status})`;
-            this.notifyAPIStatus('HackerTarget', 'error', errorMsg);
-            throw new Error(`HackerTarget query failed: ${response.status}`);
-        }
-
-        const text = await response.text();
-        const subdomains = new Set();
-        
-        // Parse CSV format
-        const lines = text.split('\n').filter(line => line.trim());
-        for (const line of lines) {
-            const parts = line.split(',');
-            if (parts.length >= 1) {
-                const subdomain = parts[0].trim();
-                if (subdomain.endsWith(`.${domain}`) && subdomain !== domain) {
-                    subdomains.add(subdomain);
-                    console.log(`    ✅ Found subdomain from HackerTarget: ${subdomain}`);
-                    // Process immediately when discovered
-                    this.notifySubdomainDiscovered(subdomain, 'HackerTarget');
-                    this.processSubdomainImmediately(subdomain, 'HackerTarget');
+        try {
+            const response = await fetch(`https://api.hackertarget.com/hostsearch/?q=${domain}`, {
+                method: 'GET',
+                headers: {
+                    'Accept': 'text/plain'
+                }
+            });
+            
+            if (!response.ok) {
+                const errorMsg = `Service unavailable (${response.status})`;
+                this.notifyAPIStatus('HackerTarget', 'error', errorMsg);
+                throw new Error(`HackerTarget query failed: ${response.status}`);
+            }
+            
+            const data = await response.text();
+            console.log(`    📊 HackerTarget returned ${data.split('\n').length} entries`);
+            
+            // Process entries and add to discovery queue
+            let addedCount = 0;
+            const lines = data.split('\n');
+            for (const line of lines) {
+                if (line.trim()) {
+                    const parts = line.split(',');
+                    if (parts.length >= 1) {
+                        const subdomain = parts[0].trim();
+                        if (subdomain && subdomain.endsWith(`.${domain}`) && subdomain !== domain) {
+                            this.discoveryQueue.addDiscovered(subdomain, 'HackerTarget');
+                            addedCount++;
+                        }
+                    }
                 }
             }
+            
+            console.log(`    ✅ HackerTarget: Added ${addedCount} subdomains to discovery queue`);
+            this.notifyAPIStatus('HackerTarget', 'success', `Found ${addedCount} subdomains`);
+            
+        } catch (error) {
+            console.log(`    ❌ HackerTarget failed:`, error.message);
+            this.notifyAPIStatus('HackerTarget', 'error', error.message);
         }
-        
-        this.notifyAPIStatus('HackerTarget', 'success', `Found ${subdomains.size} subdomains`);
-        return Array.from(subdomains);
     }
 
 
