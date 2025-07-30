@@ -348,7 +348,7 @@ class AnalysisController {
 
         // Wildcard certificate security analysis
         const wildcardCerts = this.dnsAnalyzer.getWildcardCertificates();
-        if (wildcardCerts.length > 0) {
+        if (wildcardCerts && wildcardCerts.length > 0) {
             securityResults.wildcardCertificates = this.serviceDetector.detectWildcardCertificateIssues(wildcardCerts);
             this.debug.logJSON('Wildcard certificate issues:', securityResults.wildcardCertificates);
         }

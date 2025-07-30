@@ -12,21 +12,30 @@ class DiscoveryQueue {
     }
     
     addDiscovered(subdomain, source) {
-        if (!this.discoveredSubdomains.has(subdomain)) {
-            this.discoveredSubdomains.set(subdomain, {
+        // Clean and validate subdomain name
+        const cleanSubdomain = subdomain.trim().toLowerCase();
+        
+        // Skip if empty or invalid
+        if (!cleanSubdomain || cleanSubdomain.includes('\n') || cleanSubdomain.includes('\r')) {
+            console.warn(`⚠️ Skipping invalid subdomain: "${subdomain}" (contains newlines)`);
+            return;
+        }
+        
+        if (!this.discoveredSubdomains.has(cleanSubdomain)) {
+            this.discoveredSubdomains.set(cleanSubdomain, {
                 sources: [source],
                 status: 'discovered',
                 discoveredAt: new Date()
             });
-            this.processingQueue.push(subdomain);
+            this.processingQueue.push(cleanSubdomain);
             this.stats.discovered++;
-            console.log(`🆕 Added to discovery queue: ${subdomain} (from ${source})`);
+            console.log(`🆕 Added to discovery queue: ${cleanSubdomain} (from ${source})`);
         } else {
             // Add source to existing entry
-            const entry = this.discoveredSubdomains.get(subdomain);
+            const entry = this.discoveredSubdomains.get(cleanSubdomain);
             if (!entry.sources.includes(source)) {
                 entry.sources.push(source);
-                console.log(`📝 Added source ${source} to existing subdomain: ${subdomain}`);
+                console.log(`📝 Added source ${source} to existing subdomain: ${cleanSubdomain}`);
             }
         }
     }
@@ -111,6 +120,9 @@ class DNSAnalyzer {
         // Historical records tracking
         this.historicalRecords = [];
         
+        // Wildcard certificates tracking
+        this.wildcardCertificates = [];
+        
         // NEW: Discovery queue for centralized management
         this.discoveryQueue = new DiscoveryQueue();
         
@@ -146,6 +158,7 @@ class DNSAnalyzer {
         this.processedSubdomains.clear();
         this.processedSubdomainResults.clear();
         this.historicalRecords = [];
+        this.wildcardCertificates = [];
         this.discoveryQueue.clear(); // Clear discovery queue
         this.subdomainCallbacks = [];
         this.apiCallbacks = [];
@@ -443,23 +456,15 @@ class DNSAnalyzer {
                     }
                 }
                 
-                // Check for takeover and detect services from CNAME records
+                // Check for takeover from CNAME records (service detection already handled above)
                 if (analysis.records.CNAME && analysis.records.CNAME.length > 0) {
                     const cnameTarget = analysis.records.CNAME[0].data.replace(/\.$/, '');
-                    analysis.cnameTarget = cnameTarget;
                     
                     // Detect takeover
                     const takeover = await this.detectTakeover(subdomain, cnameTarget);
                     if (takeover) {
                         analysis.takeover = takeover;
                         this.stats.takeoversDetected++;
-                    }
-                    
-                    // Detect third-party service
-                    const detectedService = this.detectPrimaryService(cnameTarget);
-                    if (detectedService) {
-                        analysis.detectedService = detectedService;
-                        console.log(`  🎯 Detected service: ${detectedService.name} (${detectedService.category}) for ${subdomain}`);
                     }
                 }
             }
@@ -1046,17 +1051,31 @@ class DNSAnalyzer {
             console.log(`    📊 crt.sh returned ${data.length} entries`);
             
             // Process entries and add to discovery queue
+            let processedCount = 0;
             let addedCount = 0;
             for (const entry of data) {
-                const subdomain = entry.name_value;
-                if (subdomain && !subdomain.startsWith('*.')) {
-                    this.discoveryQueue.addDiscovered(subdomain, 'crt.sh');
-                    addedCount++;
+                const nameValue = entry.name_value;
+                if (nameValue && !nameValue.startsWith('*.')) {
+                    // Handle case where name_value contains multiple subdomains separated by newlines
+                    const subdomains = nameValue.split(/\n|,/).map(s => s.trim()).filter(s => s && !s.startsWith('*.'));
+                    
+                    for (const subdomain of subdomains) {
+                        if (subdomain && subdomain.endsWith(`.${domain}`) && subdomain !== domain) {
+                            processedCount++;
+                            // Check if this subdomain was actually added (not a duplicate)
+                            const beforeCount = this.discoveryQueue.discoveredSubdomains.size;
+                            this.discoveryQueue.addDiscovered(subdomain, 'crt.sh');
+                            const afterCount = this.discoveryQueue.discoveredSubdomains.size;
+                            if (afterCount > beforeCount) {
+                                addedCount++;
+                            }
+                        }
+                    }
                 }
             }
             
-            console.log(`    ✅ crt.sh: Added ${addedCount} subdomains to discovery queue`);
-            this.notifyAPIStatus('crt.sh', 'success', `Found ${addedCount} subdomains`);
+            console.log(`    ✅ crt.sh: Processed ${processedCount} entries, added ${addedCount} unique subdomains to discovery queue`);
+            this.notifyAPIStatus('crt.sh', 'success', `Found ${addedCount} unique subdomains from ${processedCount} entries`);
             
         } catch (error) {
             console.log(`    ❌ crt.sh failed:`, error.message);
@@ -1087,20 +1106,27 @@ class DNSAnalyzer {
             console.log(`    📊 Cert Spotter returned ${data.length} certificates`);
             
             // Process entries and add to discovery queue
+            let processedCount = 0;
             let addedCount = 0;
             for (const cert of data) {
                 if (cert.dns_names) {
                     for (const dnsName of cert.dns_names) {
                         if (dnsName.endsWith(`.${domain}`) && dnsName !== domain) {
+                            processedCount++;
+                            // Check if this subdomain was actually added (not a duplicate)
+                            const beforeCount = this.discoveryQueue.discoveredSubdomains.size;
                             this.discoveryQueue.addDiscovered(dnsName, 'Cert Spotter');
-                            addedCount++;
+                            const afterCount = this.discoveryQueue.discoveredSubdomains.size;
+                            if (afterCount > beforeCount) {
+                                addedCount++;
+                            }
                         }
                     }
                 }
             }
             
-            console.log(`    ✅ Cert Spotter: Added ${addedCount} subdomains to discovery queue`);
-            this.notifyAPIStatus('Cert Spotter', 'success', `Found ${addedCount} subdomains`);
+            console.log(`    ✅ Cert Spotter: Processed ${processedCount} entries, added ${addedCount} unique subdomains to discovery queue`);
+            this.notifyAPIStatus('Cert Spotter', 'success', `Found ${addedCount} unique subdomains from ${processedCount} entries`);
             
         } catch (error) {
             console.log(`    ❌ Cert Spotter failed:`, error.message);
@@ -1133,19 +1159,26 @@ class DNSAnalyzer {
             console.log(`    📊 OTX returned ${data.passive_dns?.length || 0} entries`);
             
             // Process entries and add to discovery queue
+            let processedCount = 0;
             let addedCount = 0;
             if (data.passive_dns) {
                 for (const entry of data.passive_dns) {
                     const subdomain = entry.hostname;
                     if (subdomain && subdomain.endsWith(`.${domain}`) && subdomain !== domain) {
+                        processedCount++;
+                        // Check if this subdomain was actually added (not a duplicate)
+                        const beforeCount = this.discoveryQueue.discoveredSubdomains.size;
                         this.discoveryQueue.addDiscovered(subdomain, 'OTX AlienVault');
-                        addedCount++;
+                        const afterCount = this.discoveryQueue.discoveredSubdomains.size;
+                        if (afterCount > beforeCount) {
+                            addedCount++;
+                        }
                     }
                 }
             }
             
-            console.log(`    ✅ OTX: Added ${addedCount} subdomains to discovery queue`);
-            this.notifyAPIStatus('OTX AlienVault', 'success', `Found ${addedCount} subdomains`);
+            console.log(`    ✅ OTX: Processed ${processedCount} entries, added ${addedCount} unique subdomains to discovery queue`);
+            this.notifyAPIStatus('OTX AlienVault', 'success', `Found ${addedCount} unique subdomains from ${processedCount} entries`);
             
         } catch (error) {
             console.log(`    ❌ OTX failed:`, error.message);
@@ -1176,6 +1209,7 @@ class DNSAnalyzer {
             console.log(`    📊 HackerTarget returned ${data.split('\n').length} entries`);
             
             // Process entries and add to discovery queue
+            let processedCount = 0;
             let addedCount = 0;
             const lines = data.split('\n');
             for (const line of lines) {
@@ -1184,15 +1218,21 @@ class DNSAnalyzer {
                     if (parts.length >= 1) {
                         const subdomain = parts[0].trim();
                         if (subdomain && subdomain.endsWith(`.${domain}`) && subdomain !== domain) {
+                            processedCount++;
+                            // Check if this subdomain was actually added (not a duplicate)
+                            const beforeCount = this.discoveryQueue.discoveredSubdomains.size;
                             this.discoveryQueue.addDiscovered(subdomain, 'HackerTarget');
-                            addedCount++;
+                            const afterCount = this.discoveryQueue.discoveredSubdomains.size;
+                            if (afterCount > beforeCount) {
+                                addedCount++;
+                            }
                         }
                     }
                 }
             }
             
-            console.log(`    ✅ HackerTarget: Added ${addedCount} subdomains to discovery queue`);
-            this.notifyAPIStatus('HackerTarget', 'success', `Found ${addedCount} subdomains`);
+            console.log(`    ✅ HackerTarget: Processed ${processedCount} entries, added ${addedCount} unique subdomains to discovery queue`);
+            this.notifyAPIStatus('HackerTarget', 'success', `Found ${addedCount} unique subdomains from ${processedCount} entries`);
             
         } catch (error) {
             console.log(`    ❌ HackerTarget failed:`, error.message);
