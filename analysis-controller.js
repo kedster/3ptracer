@@ -178,7 +178,7 @@ class AnalysisController {
         try {
             // Add timeout to prevent indefinite waiting - increased from 45s to 90s for better reliability
             const timeoutPromise = new Promise((_, reject) => 
-                setTimeout(() => reject(new Error('Certificate Transparency query timeout - external APIs taking too long')), 90000) // 90 second timeout
+                setTimeout(() => reject(new Error('Subdomain discovery timeout')), 90000) // 90 second timeout
             );
             
             const discoveryPromise = this.dnsAnalyzer.getSubdomainsFromCT(domain);
@@ -202,26 +202,27 @@ class AnalysisController {
             
             if (error.message.includes('timeout')) {
                 // Generate detailed timeout message
-                let timeoutMessage = 'Certificate Transparency APIs timeout: ';
+                let timeoutMessage = 'Certificate Transparency APIs timeout after 90 seconds: ';
                 const timeoutDetails = [];
                 
-                if (apiStatuses.completed.length > 0) {
-                    timeoutDetails.push(`✅ ${apiStatuses.completed.join(', ')} succeeded`);
-                }
-                if (apiStatuses.timeout.length > 0) {
-                    timeoutDetails.push(`⏰ ${apiStatuses.timeout.join(', ')} timed out`);
-                }
-                if (apiStatuses.failed.length > 0) {
-                    timeoutDetails.push(`❌ ${apiStatuses.failed.join(', ')} failed`);
-                }
-                
-                if (timeoutDetails.length > 0) {
+                // Check if we have API status information
+                if (apiStatuses && (apiStatuses.completed.length > 0 || apiStatuses.timeout.length > 0 || apiStatuses.failed.length > 0)) {
+                    if (apiStatuses.completed.length > 0) {
+                        timeoutDetails.push(`✅ ${apiStatuses.completed.join(', ')} succeeded`);
+                    }
+                    if (apiStatuses.timeout.length > 0) {
+                        timeoutDetails.push(`⏰ ${apiStatuses.timeout.join(', ')} timed out`);
+                    }
+                    if (apiStatuses.failed.length > 0) {
+                        timeoutDetails.push(`❌ ${apiStatuses.failed.join(', ')} failed`);
+                    }
                     timeoutMessage += timeoutDetails.join('; ');
                 } else {
-                    timeoutMessage += 'All APIs took too long to respond';
+                    // Fallback message when API status tracking isn't available
+                    timeoutMessage += 'External Certificate Transparency APIs (crt.sh, Cert Spotter, OTX, HackerTarget) are responding slowly';
                 }
                 
-                this.addAPINotification('Certificate Transparency', timeoutMessage + '. Continuing with available data.', 'warning');
+                this.addAPINotification('Certificate Transparency', timeoutMessage + '. Continuing analysis with any available subdomain data.', 'warning');
             } else {
                 this.addAPINotification('Subdomain Discovery', `Warning: ${error.message}. Continuing with available data.`, 'warning');
             }
@@ -328,7 +329,8 @@ class AnalysisController {
             takeovers: [],
             dnsIssues: [],
             emailIssues: [],
-            cloudIssues: []
+            cloudIssues: [],
+            wildcardCertificates: []
         };
 
         if (mainDomainResults?.records) {
@@ -349,6 +351,13 @@ class AnalysisController {
                 securityResults.takeovers = this.serviceDetector.detectTakeoverFromCNAME(mainDomainResults.records.CNAME);
                 this.debug.logJSON('Takeover vulnerabilities:', securityResults.takeovers);
             }
+        }
+
+        // Wildcard certificate security analysis
+        const wildcardCerts = this.dnsAnalyzer.getWildcardCertificates();
+        if (wildcardCerts.length > 0) {
+            securityResults.wildcardCertificates = this.serviceDetector.detectWildcardCertificateIssues(wildcardCerts);
+            this.debug.logJSON('Wildcard certificate issues:', securityResults.wildcardCertificates);
         }
 
         // Process DNS records separately from services
@@ -378,6 +387,21 @@ class AnalysisController {
             historicalRecords,
             securityResults?.dnsRecords || []
         );
+        
+        // Add XMPP subdomain service detection
+        if (subdomainResults && subdomainResults.length > 0) {
+            console.log(`🗨️ Detecting XMPP services from subdomains...`);
+            const xmppServices = this.serviceDetector.detectXMPPServices(subdomainResults);
+            if (xmppServices.length > 0) {
+                console.log(`✅ Found ${xmppServices.length} XMPP services`);
+                // Add XMPP services to the processed data services
+                if (!processedData.services) processedData.services = new Map();
+                xmppServices.forEach(service => {
+                    const key = `${service.subdomain}-xmpp`;
+                    processedData.services.set(key, service);
+                });
+            }
+        }
         
         // NEW: Add Data Sovereignty Analysis
         console.log(`🌍 Running data sovereignty analysis...`);

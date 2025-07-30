@@ -154,6 +154,26 @@ class ServiceDetectionEngine {
                     patterns: ['facebook.com'],
                     txtPatterns: ['facebook-domain-verification'],
                     description: 'Social media tracking'
+                },
+                'Adobe Analytics': {
+                    patterns: ['adobe.com'],
+                    txtPatterns: ['adobe-domain-verification', 'adobe-sign-verification'],
+                    description: 'Adobe analytics and marketing tools'
+                },
+                'Mixpanel': {
+                    patterns: ['mixpanel.com'],
+                    txtPatterns: ['mixpanel-domain-verify'],
+                    description: 'Product analytics platform'
+                },
+                'Hotjar': {
+                    patterns: ['hotjar.com'],
+                    txtPatterns: ['hotjar-site-verification'],
+                    description: 'User behavior analytics and heatmaps'
+                },
+                'Segment': {
+                    patterns: ['segment.com'],
+                    txtPatterns: ['segment-site-verification'],
+                    description: 'Customer data platform'
                 }
             },
             security: {
@@ -161,6 +181,240 @@ class ServiceDetectionEngine {
                     patterns: ['letsencrypt.org'],
                     txtPatterns: ['letsencrypt'],
                     description: 'SSL certificate provider'
+                },
+                'Cloudflare': {
+                    patterns: ['cloudflare.com'],
+                    txtPatterns: ['cloudflare-verify'],
+                    description: 'Security and performance services'
+                },
+                'HackerOne': {
+                    patterns: ['hackerone.com'],
+                    txtPatterns: ['hackerone-verification'],
+                    description: 'Bug bounty and vulnerability disclosure platform'
+                },
+                'Keybase': {
+                    patterns: ['keybase.io'],
+                    txtPatterns: ['keybase-site-verification'],
+                    description: 'Identity verification and secure messaging'
+                }
+            },
+            marketing: {
+                'HubSpot': {
+                    patterns: ['hubspot.com', 'hs-sites.com'],
+                    txtPatterns: ['hubspot-developer-verification', 'hs-site-verification'],
+                    description: 'Marketing automation and CRM platform'
+                },
+                'Salesforce': {
+                    patterns: ['salesforce.com', 'force.com'],
+                    txtPatterns: ['salesforce-site-verification', 'pardot-domain-verification'],
+                    description: 'CRM and marketing automation'
+                },
+                'Mailchimp': {
+                    patterns: ['mailchimp.com'],
+                    txtPatterns: ['mailchimp-domain-verification'],
+                    description: 'Email marketing platform'
+                },
+                'Intercom': {
+                    patterns: ['intercom.io'],
+                    txtPatterns: ['intercom-domain-verify'],
+                    description: 'Customer messaging platform'
+                },
+                'Zendesk': {
+                    patterns: ['zendesk.com'],
+                    txtPatterns: ['zendesk-verification'],
+                    description: 'Customer support platform'
+                },
+                'Typeform': {
+                    patterns: ['typeform.com'],
+                    txtPatterns: ['typeform-verify'],
+                    description: 'Online form and survey builder'
+                }
+            },
+            social: {
+                'Twitter': {
+                    patterns: ['twitter.com'],
+                    txtPatterns: ['twitter-domain-verification'],
+                    description: 'Social media platform verification'
+                },
+                'LinkedIn': {
+                    patterns: ['linkedin.com'],
+                    txtPatterns: ['linkedin-domain-verification'],
+                    description: 'Professional networking platform verification'
+                },
+                'Pinterest': {
+                    patterns: ['pinterest.com'],
+                    txtPatterns: ['pinterest-site-verification'],
+                    description: 'Visual discovery platform verification'
+                },
+                'Instagram': {
+                    patterns: ['instagram.com'],
+                    txtPatterns: ['instagram-domain-verification'],
+                    description: 'Social media platform verification'
+                },
+                'TikTok': {
+                    patterns: ['tiktok.com'],
+                    txtPatterns: ['tiktok-domain-verification'],
+                    description: 'Short-form video platform verification'
+                },
+                'YouTube': {
+                    patterns: ['youtube.com'],
+                    txtPatterns: ['youtube-domain-verification'],
+                    description: 'Video platform verification'
+                },
+                'Bluesky': {
+                    patterns: ['bsky.app', 'atproto.com'],
+                    txtPatterns: ['_atproto'],
+                    description: 'Decentralized social network (AT Protocol)'
+                },
+                'Mastodon': {
+                    patterns: ['mastodon.social', 'joinmastodon.org'],
+                    txtPatterns: ['mastodon-verification'],
+                    description: 'Decentralized social network verification'
+                }
+            },
+            payments: {
+                'Stripe': {
+                    patterns: ['stripe.com'],
+                    txtPatterns: ['stripe-verification'],
+                    description: 'Payment processing platform'
+                },
+                'PayPal': {
+                    patterns: ['paypal.com'],
+                    txtPatterns: ['paypal-domain-verification'],
+                    description: 'Digital payment platform'
+                },
+                'Square': {
+                    patterns: ['squareup.com'],
+                    txtPatterns: ['square-site-verification'],
+                    description: 'Payment processing and business tools'
+                },
+                'Shopify': {
+                    patterns: ['shopify.com', 'myshopify.com'],
+                    txtPatterns: ['shopify-domain-verification'],
+                    description: 'E-commerce platform'
+                }
+            },
+            monitoring: {
+                'Pingdom': {
+                    patterns: ['pingdom.com'],
+                    txtPatterns: ['pingdom-verification'],
+                    description: 'Website monitoring and performance'
+                },
+                'New Relic': {
+                    patterns: ['newrelic.com'],
+                    txtPatterns: ['newrelic-domain-verification'],
+                    description: 'Application performance monitoring'
+                },
+                'StatusPage': {
+                    patterns: ['statuspage.io'],
+                    txtPatterns: ['statuspage-domain-verification'],
+                    description: 'Status page and incident communication'
+                },
+                'DataDog': {
+                    patterns: ['datadoghq.com'],
+                    txtPatterns: ['datadog-domain-verification'],
+                    description: 'Infrastructure monitoring and analytics'
+                }
+            },
+            productivity: {
+                'Slack': {
+                    patterns: ['slack.com'],
+                    txtPatterns: ['slack-domain-verification'],
+                    description: 'Team communication platform'
+                },
+                'Microsoft 365': {
+                    patterns: ['office.com', 'office365.com'],
+                    txtPatterns: ['ms-office-verification', 'office365-domain-verification'],
+                    description: 'Office productivity suite'
+                },
+                'Google Workspace': {
+                    patterns: ['google.com', 'googledomains.com'],
+                    txtPatterns: ['google-site-verification', 'googleapps-domain-verification'],
+                    description: 'Productivity and collaboration suite'
+                },
+                'Zoom': {
+                    patterns: ['zoom.us'],
+                    txtPatterns: ['zoom-domain-verification'],
+                    description: 'Video conferencing platform'
+                },
+                'Atlassian': {
+                    patterns: ['atlassian.com'],
+                    txtPatterns: ['atlassian-domain-verification'],
+                    description: 'Development and collaboration tools'
+                }
+            },
+            content: {
+                'WordPress.com': {
+                    patterns: ['wordpress.com'],
+                    txtPatterns: ['wordpress-verification'],
+                    description: 'Content management system'
+                },
+                'Ghost': {
+                    patterns: ['ghost.io', 'ghost.org'],
+                    txtPatterns: ['ghost-site-verification'],
+                    description: 'Publishing platform'
+                },
+                'Medium': {
+                    patterns: ['medium.com'],
+                    txtPatterns: ['medium-domain-verification'],
+                    description: 'Online publishing platform'
+                },
+                'Webflow': {
+                    patterns: ['webflow.io'],
+                    txtPatterns: ['webflow-domain-verification'],
+                    description: 'Website design and hosting platform'
+                }
+            },
+            communication: {
+                'XMPP/Jabber Service': {
+                    patterns: ['jabber.org', 'xmpp.org', 'conversations.im', 'prosody.im', 'ejabberd.im'],
+                    cnamePatterns: ['jabber', 'xmpp', 'chat', 'im'],
+                    txtPatterns: ['xmpp-verification', 'jabber-verification'],
+                    description: 'XMPP/Jabber instant messaging service'
+                },
+                'Conversations.im': {
+                    patterns: ['conversations.im'],
+                    cnamePatterns: ['conversations'],
+                    txtPatterns: ['conversations-verification'],
+                    description: 'Popular XMPP service provider'
+                },
+                'Matrix Protocol': {
+                    patterns: ['matrix.org'],
+                    cnamePatterns: ['matrix'],
+                    txtPatterns: ['matrix-verification'],
+                    description: 'Matrix decentralized communication protocol'
+                },
+                'Discord': {
+                    patterns: ['discord.com', 'discordapp.com'],
+                    txtPatterns: ['discord-domain-verification'],
+                    description: 'Voice and text communication platform'
+                },
+                'Telegram': {
+                    patterns: ['telegram.org'],
+                    txtPatterns: ['telegram-domain-verification'],
+                    description: 'Instant messaging platform'
+                }
+            },
+            web3: {
+                'ENS (Ethereum Name Service)': {
+                    patterns: ['ens.domains'],
+                    txtPatterns: ['ens-domain-verification', '_ens'],
+                    description: 'Ethereum domain name system'
+                },
+                'Unstoppable Domains': {
+                    patterns: ['unstoppabledomains.com'],
+                    txtPatterns: ['unstoppable-domain-verification'],
+                    description: 'Blockchain-based domain system'
+                },
+                'IPFS': {
+                    patterns: ['ipfs.io'],
+                    txtPatterns: ['_ipfs', 'ipfs-hash'],
+                    description: 'InterPlanetary File System content addressing'
+                },
+                'Arweave': {
+                    patterns: ['arweave.org'],
+                    txtPatterns: ['_arweave', 'arweave-verification'],
+                    description: 'Permanent data storage network'
                 }
             },
             dns: {
@@ -339,6 +593,38 @@ class ServiceDetectionEngine {
                         data: record.data,
                         record: record,
                         category: 'email-security'
+                    });
+                } else if (txtData.includes('-site-verification') || txtData.includes('-domain-verification')) {
+                    // Generic site verification records
+                    const serviceName = this.extractServiceFromVerification(record.data);
+                    dnsRecords.push({
+                        type: 'Site-Verification',
+                        name: 'Domain Verification Record',
+                        description: `Domain ownership verification for ${serviceName || 'third-party service'}`,
+                        data: record.data,
+                        record: record,
+                        category: 'verification'
+                    });
+                } else if (txtData.includes('verification') || txtData.includes('verify')) {
+                    // Other verification patterns
+                    const serviceName = this.extractServiceFromVerification(record.data);
+                    dnsRecords.push({
+                        type: 'Verification',
+                        name: 'Service Verification Record',
+                        description: `Service verification for ${serviceName || 'unknown service'}`,
+                        data: record.data,
+                        record: record,
+                        category: 'verification'
+                    });
+                } else if (txtData.startsWith('v=') && !txtData.includes('spf') && !txtData.includes('dmarc') && !txtData.includes('dkim')) {
+                    // Generic versioned protocol records
+                    dnsRecords.push({
+                        type: 'Protocol-Record',
+                        name: 'Versioned Protocol Record',
+                        description: 'Structured protocol or service configuration record',
+                        data: record.data,
+                        record: record,
+                        category: 'protocol'
                     });
                 }
             }
@@ -805,6 +1091,65 @@ class ServiceDetectionEngine {
         return null;
     }
 
+    // Extract service name from verification TXT records
+    extractServiceFromVerification(data) {
+        const lowerData = data.toLowerCase();
+        
+        // Common verification patterns
+        const patterns = [
+            { pattern: /google-site-verification/i, service: 'Google' },
+            { pattern: /facebook-domain-verification/i, service: 'Facebook' },
+            { pattern: /twitter-domain-verification/i, service: 'Twitter' },
+            { pattern: /linkedin-domain-verification/i, service: 'LinkedIn' },
+            { pattern: /pinterest-site-verification/i, service: 'Pinterest' },
+            { pattern: /instagram-domain-verification/i, service: 'Instagram' },
+            { pattern: /tiktok-domain-verification/i, service: 'TikTok' },
+            { pattern: /youtube-domain-verification/i, service: 'YouTube' },
+            { pattern: /_atproto/i, service: 'Bluesky' },
+            { pattern: /mastodon-verification/i, service: 'Mastodon' },
+            { pattern: /adobe-domain-verification/i, service: 'Adobe' },
+            { pattern: /stripe-verification/i, service: 'Stripe' },
+            { pattern: /paypal-domain-verification/i, service: 'PayPal' },
+            { pattern: /shopify-domain-verification/i, service: 'Shopify' },
+            { pattern: /hubspot.*verification/i, service: 'HubSpot' },
+            { pattern: /salesforce.*verification/i, service: 'Salesforce' },
+            { pattern: /mailchimp-domain-verification/i, service: 'Mailchimp' },
+            { pattern: /slack-domain-verification/i, service: 'Slack' },
+            { pattern: /zoom-domain-verification/i, service: 'Zoom' },
+            { pattern: /atlassian-domain-verification/i, service: 'Atlassian' },
+            { pattern: /pingdom-verification/i, service: 'Pingdom' },
+            { pattern: /datadog-domain-verification/i, service: 'DataDog' },
+            { pattern: /newrelic-domain-verification/i, service: 'New Relic' },
+            { pattern: /ms.*verification|office.*verification/i, service: 'Microsoft' },
+            { pattern: /cloudflare-verify/i, service: 'Cloudflare' },
+            { pattern: /keybase.*verification/i, service: 'Keybase' },
+            { pattern: /wordpress-verification/i, service: 'WordPress' },
+            { pattern: /_ens|ens-domain-verification/i, service: 'ENS' },
+            { pattern: /unstoppable-domain-verification/i, service: 'Unstoppable Domains' },
+            { pattern: /_ipfs|ipfs-hash/i, service: 'IPFS' },
+            { pattern: /_arweave|arweave-verification/i, service: 'Arweave' },
+            { pattern: /xmpp-verification|jabber-verification/i, service: 'XMPP' },
+            { pattern: /conversations-verification/i, service: 'Conversations.im' },
+            { pattern: /matrix-verification/i, service: 'Matrix' },
+            { pattern: /discord-domain-verification/i, service: 'Discord' },
+            { pattern: /telegram-domain-verification/i, service: 'Telegram' }
+        ];
+        
+        for (const { pattern, service } of patterns) {
+            if (pattern.test(data)) {
+                return service;
+            }
+        }
+        
+        // Try to extract service name from common patterns like "servicename-verification="
+        const match = lowerData.match(/^([a-z0-9]+)[-_](?:site[-_]|domain[-_])?verif/);
+        if (match && match[1] && match[1].length > 2) {
+            return match[1].charAt(0).toUpperCase() + match[1].slice(1);
+        }
+        
+        return null;
+    }
+
     // Process SRV records to detect service dependencies
     processSRVRecords(srvRecords, detectedServices, domainBeingAnalyzed) {
         console.log(`🔍 Processing ${srvRecords.length} SRV records for domain: ${domainBeingAnalyzed}`);
@@ -839,6 +1184,76 @@ class ServiceDetectionEngine {
                 record, 
                 'SRV'
             );
+        }
+    }
+
+    // Detect XMPP services from subdomain patterns
+    detectXMPPServices(subdomainResults, detectedServices = null) {
+        console.log(`🔍 Analyzing ${subdomainResults.length} subdomains for XMPP service patterns...`);
+        
+        // If no detectedServices map provided, create a temporary one and return results as array
+        const isReturnArray = !detectedServices;
+        if (!detectedServices) {
+            detectedServices = new Map();
+        }
+        
+        const xmppPatterns = [
+            // Common XMPP subdomain patterns
+            { pattern: /^(xmpp|jabber|chat|im|talk|conference|muc|pubsub)\./, service: 'XMPP Service' },
+            { pattern: /\.(xmpp|jabber)\./, service: 'XMPP Service' },
+            // Specific XMPP service patterns
+            { pattern: /^(bosh|websocket)\./, service: 'XMPP Web/BOSH Gateway' },
+            { pattern: /^(upload|proxy|voice|video)\./, service: 'XMPP Media Services' },
+            // Known XMPP service providers
+            { pattern: /^(conversations|prosody|ejabberd|openfire|tigase)\./, service: 'XMPP Server' },
+            // XMPP-specific subdomains
+            { pattern: /^(register|invite|admin|mod|moderator)\..*\.(im|chat|xmpp)$/, service: 'XMPP Management' },
+            // Federation and transport subdomains
+            { pattern: /^(s2s|transport|gateway|bridge)\./, service: 'XMPP Federation/Transport' },
+        ];
+        
+        for (const subdomainResult of subdomainResults) {
+            const subdomain = subdomainResult.subdomain;
+            
+            for (const { pattern, service } of xmppPatterns) {
+                if (pattern.test(subdomain)) {
+                    console.log(`🎯 Detected XMPP pattern in subdomain: ${subdomain} -> ${service}`);
+                    
+                    // Check if subdomain has actual IP resolution
+                    const hasResolution = subdomainResult.ip || 
+                                        (subdomainResult.ipAddresses && subdomainResult.ipAddresses.length > 0) ||
+                                        (subdomainResult.records && subdomainResult.records.A && subdomainResult.records.A.length > 0);
+                    
+                    if (hasResolution) {
+                        this.addOrUpdateService(
+                            detectedServices,
+                            `${service} (${subdomain})`,
+                            {
+                                description: `${service} detected via subdomain pattern analysis`,
+                                subdomain: subdomain,
+                                ip: subdomainResult.ip || subdomainResult.ipAddresses?.[0] || 'Resolved',
+                                detectionMethod: 'subdomain-pattern',
+                                isXMPPService: true,
+                                securityImplication: 'Communication service - may handle sensitive messaging data'
+                            },
+                            'communication',
+                            {
+                                name: subdomain,
+                                data: subdomainResult.ip || 'Pattern Detection',
+                                subdomain: subdomain
+                            },
+                            'Subdomain-Pattern'
+                        );
+                    }
+                }
+            }
+        }
+        
+        console.log(`✅ XMPP subdomain analysis complete`);
+        
+        // If called without detectedServices parameter, return array of detected services
+        if (isReturnArray) {
+            return Array.from(detectedServices.values());
         }
     }
 
@@ -936,6 +1351,71 @@ class ServiceDetectionEngine {
             }
         }
         
+        return issues;
+    }
+
+    // Detect wildcard certificate security implications
+    detectWildcardCertificateIssues(wildcardCertificates) {
+        const issues = [];
+        
+        if (!wildcardCertificates || wildcardCertificates.length === 0) {
+            return issues;
+        }
+        
+        console.log(`🔍 Analyzing ${wildcardCertificates.length} wildcard certificates for security implications...`);
+        
+        // Group certificates by risk level and domain scope
+        const topLevelWildcards = wildcardCertificates.filter(cert => 
+            cert.domain.match(/^\*\.[^.]+\.[^.]+$/)
+        );
+        const subdomainWildcards = wildcardCertificates.filter(cert => 
+            cert.domain.includes('*.') && !cert.domain.match(/^\*\.[^.]+\.[^.]+$/)
+        );
+        
+        // Create grouped findings instead of individual ones
+        if (topLevelWildcards.length > 0) {
+            issues.push({
+                type: 'wildcard_certificate',
+                risk: 'high',
+                description: `Top-level wildcard certificates detected (${topLevelWildcards.length}) - allow SSL for any subdomain`,
+                recommendation: 'Consider using specific certificates for individual subdomains to limit attack surface',
+                details: {
+                    certificateCount: topLevelWildcards.length,
+                    certificates: topLevelWildcards.map(cert => ({
+                        domain: cert.domain,
+                        issuer: cert.issuer,
+                        source: cert.source,
+                        validFrom: cert.notBefore,
+                        validTo: cert.notAfter,
+                        certificateId: cert.certificateId
+                    }))
+                },
+                securityImplication: 'Top-level wildcard certificates can be misused if subdomain takeover occurs or if certificate is compromised'
+            });
+        }
+        
+        if (subdomainWildcards.length > 0) {
+            issues.push({
+                type: 'wildcard_certificate',
+                risk: 'medium',
+                description: `Subdomain wildcard certificates detected (${subdomainWildcards.length})`,
+                recommendation: 'Ensure proper subdomain access controls are in place',
+                details: {
+                    certificateCount: subdomainWildcards.length,
+                    certificates: subdomainWildcards.map(cert => ({
+                        domain: cert.domain,
+                        issuer: cert.issuer,
+                        source: cert.source,
+                        validFrom: cert.notBefore,
+                        validTo: cert.notAfter,
+                        certificateId: cert.certificateId
+                    }))
+                },
+                securityImplication: 'Wildcard certificates can be misused if subdomain takeover occurs or if certificate is compromised'
+            });
+        }
+        
+        console.log(`✅ Created ${issues.length} grouped wildcard certificate findings for ${wildcardCertificates.length} certificates`);
         return issues;
     }
 

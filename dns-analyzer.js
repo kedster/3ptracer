@@ -35,6 +35,9 @@ class DNSAnalyzer {
         // Historical records tracking
         this.historicalRecords = [];
         
+        // Wildcard certificates tracking
+        this.wildcardCertificates = [];
+        
         // Callbacks for real-time notifications
         this.subdomainCallbacks = [];
         this.apiCallbacks = [];
@@ -66,7 +69,8 @@ class DNSAnalyzer {
         // Clear all internal arrays and sets
         this.processedSubdomains.clear();
         this.processedSubdomainResults.clear();
-        this.historicalRecords = []; // Clear historical records
+        this.historicalRecords = [];
+        this.wildcardCertificates = []; // Clear historical records
         this.subdomainCallbacks = [];
         this.apiCallbacks = [];
         this.currentDomain = null;
@@ -156,6 +160,51 @@ class DNSAnalyzer {
     // Get historical records
     getHistoricalRecords() {
         return this.historicalRecords;
+    }
+
+    // Get wildcard certificates
+    getWildcardCertificates() {
+        return this.wildcardCertificates;
+    }
+
+    // Convert DNS record type number to name
+    getRecordTypeName(typeNumber) {
+        const types = {
+            1: 'A',
+            2: 'NS', 
+            5: 'CNAME',
+            15: 'MX',
+            16: 'TXT',
+            28: 'AAAA',
+            257: 'CAA'
+        };
+        return types[typeNumber] || `TYPE${typeNumber}`;
+    }
+
+    // Fallback method for specific record type queries
+    async querySpecificRecordTypes(domain, results) {
+        const recordTypes = ['A', 'CNAME', 'TXT', 'MX', 'NS', 'CAA'];
+        let hasARecords = false;
+        
+        for (const type of recordTypes) {
+            // Skip CNAME if A records already exist (RFC compliance)
+            if (type === 'CNAME' && hasARecords) {
+                console.log(`  ⏭️  Skipping CNAME query - A records already found for ${domain}`);
+                continue;
+            }
+            
+            try {
+                const records = await this.queryDNS(domain, type);
+                if (records && records.length > 0) {
+                    results.records[type] = records;
+                    if (type === 'A') {
+                        hasARecords = true;
+                    }
+                }
+            } catch (error) {
+                console.warn(`Failed to query ${type} records for ${domain}:`, error);
+            }
+        }
     }
 
     // Check if CNAME points to main domain
@@ -566,27 +615,35 @@ class DNSAnalyzer {
         
         // Try primary DNS servers first
         console.log(`  🔄 Trying PRIMARY DNS servers...`);
+        let validResponseReceived = false;
+        
         for (const dnsServer of this.primaryDNSServers) {
             console.log(`    📡 Trying PRIMARY DNS server: ${dnsServer}`);
             
             try {
                 const response = await this.queryDNSServer(domain, type, dnsServer);
-                if (response && response.Answer && response.Answer.length > 0) {
-                    console.log(`    ✅ PRIMARY DNS server ${dnsServer} succeeded with ${response.Answer.length} records`);
-                    return response.Answer; // Return immediately on success
-                } else {
-                    console.log(`    ⚠️  PRIMARY DNS server ${dnsServer} returned no records`);
+                if (response) {
+                    validResponseReceived = true; // We got a valid DNS response
+                    
+                    if (response.Answer && response.Answer.length > 0) {
+                        console.log(`    ✅ PRIMARY DNS server ${dnsServer} succeeded with ${response.Answer.length} records`);
+                        return response.Answer; // Return immediately on success
+                    } else {
+                        // Valid response but no records (normal for missing record types)
+                        console.log(`    ℹ️  PRIMARY DNS server ${dnsServer} confirmed no ${type} records exist`);
+                        return null; // Don't try other servers - this is the authoritative answer
+                    }
                 }
             } catch (error) {
                 console.warn(`    ❌ PRIMARY DNS server ${dnsServer} failed:`, error.message);
-                continue; // Try next primary server
+                continue; // Try next primary server only on actual failure
             }
         }
         
-        // Only try backup servers if we have any
-        if (this.standbyDNSServers.length > 0) {
+        // Only try backup servers if ALL primary servers actually failed (not just returned no records)
+        if (!validResponseReceived && this.fallbackDNSServers.length > 0) {
             console.log(`  🚨 All PRIMARY DNS servers failed, trying BACKUP servers...`);
-            for (const dnsServer of this.standbyDNSServers) {
+            for (const dnsServer of this.fallbackDNSServers) {
                 console.log(`    📡 Trying BACKUP DNS server: ${dnsServer}`);
                 
                 try {
@@ -694,25 +751,49 @@ class DNSAnalyzer {
             services: []
         };
 
-        // Query all record types for the main domain
-        // Main domains need comprehensive analysis including:
-        // - A: IP addresses
-        // - CNAME: Aliases (less common for main domains)
-        // - TXT: Verification, SPF, DMARC policies
-        // - MX: Email routing
-        // - NS: Authoritative nameservers
-        // - CAA: Certificate Authority Authorization (security trust relationships)
-        const recordTypes = ['A', 'CNAME', 'TXT', 'MX', 'NS', 'CAA'];
-        
-        for (const type of recordTypes) {
-            try {
-                const records = await this.queryDNS(domain, type);
-                if (records && records.length > 0) {
-                    results.records[type] = records;
+        // First, do a default query (A record) to discover if it's A or CNAME
+        console.log(`🔍 Checking primary record type for ${domain}...`);
+        try {
+            const primaryRecords = await this.queryDNS(domain); // Defaults to 'A' type
+            if (primaryRecords && primaryRecords.length > 0) {
+                // Group records by type - this will include CNAME chain if it exists
+                const recordsByType = {};
+                const foundTypes = new Set();
+                
+                for (const record of primaryRecords) {
+                    const typeName = this.getRecordTypeName(record.type);
+                    if (!recordsByType[typeName]) {
+                        recordsByType[typeName] = [];
+                    }
+                    recordsByType[typeName].push(record);
+                    foundTypes.add(typeName);
                 }
-            } catch (error) {
-                console.warn(`Failed to query ${type} records for ${domain}:`, error);
+                
+                console.log(`  📋 Primary query found: ${Array.from(foundTypes).join(', ')}`);
+                results.records = recordsByType;
+                
+                // Now query for other important record types (TXT, MX, NS, CAA)
+                // Skip CNAME since we already know from the primary query if it exists
+                const otherTypes = ['TXT', 'MX', 'NS', 'CAA'];
+                for (const type of otherTypes) {
+                    try {
+                        const records = await this.queryDNS(domain, type);
+                        if (records && records.length > 0) {
+                            results.records[type] = records;
+                        }
+                    } catch (error) {
+                        console.warn(`Failed to query ${type} records for ${domain}:`, error);
+                    }
+                }
+                
+            } else {
+                // Fallback: If primary query returns nothing, try specific types
+                console.log(`  ⚠️  Primary query returned no records, trying specific types...`);
+                await this.querySpecificRecordTypes(domain, results);
             }
+        } catch (error) {
+            console.warn(`Primary DNS query failed for ${domain}, falling back to specific queries:`, error.message);
+            await this.querySpecificRecordTypes(domain, results);
         }
 
         // Query SPF and DMARC records
@@ -932,7 +1013,18 @@ class DNSAnalyzer {
                         this.notifySubdomainDiscovered(cleanName, 'crt.sh');
                         this.processSubdomainImmediately(cleanName, 'crt.sh', certInfo);
                     } else if (cleanName.includes('*')) {
-                        console.log(`    ⚠️  Skipping wildcard from crt.sh: ${cleanName}`);
+                        console.log(`    🔍 Found wildcard certificate from crt.sh: ${cleanName}`);
+                        // Store wildcard certificate information
+                        const wildcardCertInfo = {
+                            domain: cleanName,
+                            source: 'crt.sh',
+                            issuer: cert.issuer_name || 'Unknown',
+                            notBefore: cert.not_before || null,
+                            notAfter: cert.not_after || null,
+                            certificateId: cert.id || null,
+                            discoveredAt: new Date().toISOString()
+                        };
+                        this.wildcardCertificates.push(wildcardCertInfo);
                     }
                 }
             }
@@ -998,7 +1090,18 @@ class DNSAnalyzer {
                         this.notifySubdomainDiscovered(cleanName, 'Cert Spotter');
                         this.processSubdomainImmediately(cleanName, 'Cert Spotter', certInfo);
                     } else if (cleanName.includes('*')) {
-                        console.log(`    ⚠️  Skipping wildcard from Cert Spotter: ${cleanName}`);
+                        console.log(`    🔍 Found wildcard certificate from Cert Spotter: ${cleanName}`);
+                        // Store wildcard certificate information
+                        const wildcardCertInfo = {
+                            domain: cleanName,
+                            source: 'Cert Spotter',
+                            issuer: cert.issuer?.name || 'Unknown',
+                            notBefore: cert.not_before || null,
+                            notAfter: cert.not_after || null,
+                            certificateId: cert.id || null,
+                            discoveredAt: new Date().toISOString()
+                        };
+                        this.wildcardCertificates.push(wildcardCertInfo);
                     }
                 }
             }
