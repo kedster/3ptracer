@@ -1,0 +1,23 @@
+name = "3ptracer-worker"
+main = "worker/index.js"
+compatibility_date = "2023-10-30"
+
+# KV for caching API responses
+[[kv_namespaces]]
+binding = "CACHE"
+id = "3ptracer_cache"
+preview_id = "3ptracer_cache_preview"
+
+# Environment variables
+[vars]
+CORS_ORIGIN = "https://3ptracer.pages.dev"
+
+# Production environment
+[env.production]
+name = "3ptracer-worker-prod"
+vars = { CORS_ORIGIN = "https://3ptracer.pages.dev" }
+
+# Development environment  
+[env.development]
+name = "3ptracer-worker-dev"
+vars = { CORS_ORIGIN = "*" }
