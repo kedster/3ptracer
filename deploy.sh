@@ -31,7 +31,11 @@ cp about.html docs/
 # CSS file
 cp style.css docs/
 
-# JavaScript files
+# JavaScript files - Configuration and API
+cp config.js docs/
+cp api-client.js docs/
+
+# JavaScript files - Core Application
 cp app.js docs/
 cp dns-analyzer.js docs/
 cp service-detection-engine.js docs/
@@ -60,6 +64,8 @@ required_files=(
     "index.html"
     "about.html"
     "style.css"
+    "config.js"
+    "api-client.js"
     "app.js"
     "dns-analyzer.js"
     "service-detection-engine.js"

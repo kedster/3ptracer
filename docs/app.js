@@ -28,6 +28,106 @@ class App {
 // Global app instance
 const app = new App();
 
+// Configuration panel functions
+function toggleConfigPanel() {
+    const content = document.getElementById('configContent');
+    const toggle = document.getElementById('configToggle');
+    
+    if (content.style.display === 'none') {
+        content.style.display = 'block';
+        toggle.textContent = '▲';
+    } else {
+        content.style.display = 'none';
+        toggle.textContent = '▼';
+    }
+}
+
+function updateConfigDisplay() {
+    const config = appConfig.getDisplayConfig();
+    const status = apiClient.getStatus();
+    
+    document.getElementById('envStatus').textContent = config.environment;
+    document.getElementById('workerUrl').textContent = config.workerUrl;
+    document.getElementById('apiMode').textContent = config.features.useWorkerAPIs ? 'Worker Proxy' : 'Direct APIs';
+    
+    // Update debug button
+    const debugBtn = document.getElementById('debugToggle');
+    debugBtn.textContent = config.features.enableDebugMode ? 'Debug Mode: ON' : 'Debug Mode: OFF';
+    debugBtn.style.background = config.features.enableDebugMode ? '#FF9800' : '#2196F3';
+}
+
+function toggleDebugMode() {
+    const currentMode = appConfig.features.enableDebugMode;
+    appConfig.setDebugMode(!currentMode);
+    updateConfigDisplay();
+}
+
+async function checkWorkerHealth() {
+    const healthSpan = document.getElementById('workerHealth');
+    
+    if (!appConfig.workerUrl) {
+        healthSpan.textContent = 'N/A (Worker not configured)';
+        healthSpan.style.color = '#666';
+        return;
+    }
+    
+    healthSpan.textContent = 'Checking...';
+    healthSpan.style.color = '#FFA500';
+    
+    try {
+        const healthy = await appConfig.checkWorkerHealth();
+        healthSpan.textContent = healthy ? '✅ Healthy' : '❌ Unhealthy';
+        healthSpan.style.color = healthy ? '#4CAF50' : '#F44336';
+    } catch (error) {
+        healthSpan.textContent = '❌ Error';
+        healthSpan.style.color = '#F44336';
+    }
+}
+
+async function testConnectivity() {
+    const resultsDiv = document.getElementById('connectivityResults');
+    resultsDiv.style.display = 'block';
+    resultsDiv.innerHTML = '<p>Testing connectivity to all services...</p>';
+    
+    try {
+        const results = await apiClient.testConnectivity();
+        
+        let html = '<h4>Connectivity Test Results:</h4>';
+        
+        // Worker results
+        if (results.worker !== null) {
+            html += `<p><strong>Worker:</strong> ${results.worker ? '✅ Available' : '❌ Unavailable'}</p>`;
+        }
+        
+        // DNS providers
+        html += '<p><strong>DNS Providers:</strong></p>';
+        for (const [provider, status] of Object.entries(results.dns)) {
+            html += `<span style="margin-right: 15px;">${provider}: ${status ? '✅' : '❌'}</span>`;
+        }
+        
+        // CT sources
+        html += '<p><strong>Certificate Transparency Sources:</strong></p>';
+        for (const [source, status] of Object.entries(results.ct)) {
+            html += `<span style="margin-right: 15px;">${source}: ${status ? '✅' : '❌'}</span>`;
+        }
+        
+        resultsDiv.innerHTML = html;
+    } catch (error) {
+        resultsDiv.innerHTML = `<p style="color: #F44336;">Error testing connectivity: ${error.message}</p>`;
+    }
+}
+
+// Initialize configuration display on page load
+document.addEventListener('DOMContentLoaded', function() {
+    updateConfigDisplay();
+    checkWorkerHealth();
+    
+    const domainInput = document.getElementById('domain');
+    const savedDomain = localStorage.getItem('3ptracer_last_domain');
+    if (savedDomain) {
+        domainInput.value = savedDomain;
+    }
+});
 // Main analysis function (called from HTML)
 async function analyzeDomain() {
     const domainInput = document.getElementById('domain');

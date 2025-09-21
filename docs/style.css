@@ -1370,4 +1370,71 @@ input[type="text"]:focus {
     background: #667eea;
     color: white;
     text-decoration: none;
+}
+
+/* Collapsible Sections */
+.collapsible-section {
+    margin-bottom: 20px;
+    border: 1px solid #e0e0e0;
+    border-radius: 8px;
+    overflow: hidden;
+    background: white;
+}
+
+.section-header {
+    background: #f8f9fa;
+    padding: 15px 20px;
+    cursor: pointer;
+    user-select: none;
+    border-bottom: 1px solid #e0e0e0;
+    transition: background-color 0.2s ease;
+}
+
+.section-header:hover {
+    background: #e9ecef;
+}
+
+.section-title {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+}
+
+.section-title h2 {
+    font-size: 1.3rem;
+    font-weight: 600;
+    margin: 0;
+    color: #2c3e50;
+}
+
+.toggle-icon {
+    font-size: 0.9rem;
+    color: #667eea;
+    font-weight: bold;
+    transition: transform 0.2s ease;
+    min-width: 12px;
+}
+
+.collapsible-section.expanded .toggle-icon {
+    transform: rotate(0deg);
+}
+
+.section-content {
+    padding: 20px;
+    transition: all 0.3s ease;
+}
+
+/* Override existing h2 styles within collapsible sections */
+.collapsible-section h2 {
+    margin-top: 0 !important;
+    margin-bottom: 0 !important;
+}
+
+/* Ensure proper spacing for nested content */
+.section-content > *:first-child {
+    margin-top: 0;
+}
+
+.section-content > *:last-child {
+    margin-bottom: 0;
 } 

@@ -4,6 +4,7 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>3rd Party Tracer - Third Party Service Identifier</title>
+    <meta name="worker-url" content="https://3ptracer-worker.your-subdomain.workers.dev">
     <link rel="stylesheet" href="style.css">
     <script defer data-domain="cyfinoid.github.io" src="https://plausible.io/js/script.outbound-links.js"></script>
     <script>window.plausible = window.plausible || function() { (window.plausible.q = window.plausible.q || []).push(arguments) }</script>
@@ -20,6 +21,27 @@
         </div>
 
         <div class="content">
+            <!-- Configuration Panel (collapsible) -->
+            <div class="config-panel" id="configPanel" style="margin-bottom: 20px;">
+                <div class="config-header" onclick="toggleConfigPanel()" style="cursor: pointer; padding: 10px; background: rgba(255,255,255,0.1); border-radius: 6px; display: flex; justify-content: space-between; align-items: center;">
+                    <span>🔧 Configuration & Status</span>
+                    <span id="configToggle">▼</span>
+                </div>
+                <div class="config-content" id="configContent" style="display: none; padding: 15px; background: rgba(255,255,255,0.05); border-radius: 0 0 6px 6px; margin-top: 2px;">
+                    <div class="config-info" id="configInfo">
+                        <p><strong>Environment:</strong> <span id="envStatus">Loading...</span></p>
+                        <p><strong>Worker URL:</strong> <span id="workerUrl">Loading...</span></p>
+                        <p><strong>API Mode:</strong> <span id="apiMode">Loading...</span></p>
+                        <p><strong>Worker Health:</strong> <span id="workerHealth">Checking...</span></p>
+                    </div>
+                    <div class="config-actions" style="margin-top: 10px;">
+                        <button onclick="testConnectivity()" class="test-btn" style="background: #4CAF50; color: white; border: none; padding: 8px 16px; border-radius: 4px; cursor: pointer; margin-right: 10px;">Test Connectivity</button>
+                        <button onclick="toggleDebugMode()" class="debug-btn" id="debugToggle" style="background: #2196F3; color: white; border: none; padding: 8px 16px; border-radius: 4px; cursor: pointer;">Debug Mode: OFF</button>
+                    </div>
+                    <div class="connectivity-results" id="connectivityResults" style="margin-top: 10px; font-size: 0.9rem; display: none;"></div>
+                </div>
+            </div>
+
             <div class="input-section">
                 <div class="form-group">
                     <label for="domain">Enter Domain Name:</label>
@@ -201,6 +223,11 @@
     <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf-autotable/3.5.31/jspdf.plugin.autotable.min.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
     
+    <!-- Configuration and API -->
+    <script src="config.js"></script>
+    <script src="api-client.js"></script>
+    
+    <!-- Core Application -->
     <script src="export-manager.js"></script>
     <script src="subdomain-registry.js"></script>
     <script src="service-registry.js"></script>
