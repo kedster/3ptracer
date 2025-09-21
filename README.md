@@ -2,7 +2,7 @@
 
 **🔍 Advanced Third-Party Service Discovery Tool**
 
-[![Live Demo](https://img.shields.io/badge/Live%20Demo-3rd%20Party%20Tracer-blue?style=for-the-badge&logo=github)](https://cyfinoid.github.io/3ptracer/)
+[![Live Demo](https://img.shields.io/badge/Live%20Demo-3rd%20Party%20Tracer-blue?style=for-the-badge&logo=github)](https://kedster.github.io/3ptracer/)
 [![License](https://img.shields.io/badge/License-MIT-green.svg)](LICENSE)
 [![Technology](https://img.shields.io/badge/Technology-HTML%2FJS%2FCSS-orange)](https://developer.mozilla.org/en-US/docs/Web/HTML)
 
@@ -10,7 +10,25 @@
 
 ## 🌐 Live Application
 
-**🔗 [https://cyfinoid.github.io/3ptracer/](https://cyfinoid.github.io/3ptracer/)**
+**🔗 [https://kedster.github.io/3ptracer/](https://kedster.github.io/3ptracer/)**
+
+## 🚀 Deployment Status
+
+### Current Deployment
+- **Platform**: GitHub Pages
+- **Status**: ✅ Active and Operational
+- **URL**: [https://kedster.github.io/3ptracer/](https://kedster.github.io/3ptracer/)
+- **Last Updated**: September 21, 2025
+- **Features**: Full functionality with direct API calls
+
+### Available Deployment Options
+- **GitHub Pages**: ✅ Currently deployed and tested
+- **Cloudflare Pages + Workers**: 🔧 Available (requires authentication)
+
+### Worker API Status
+- **Cloudflare Worker**: 🔧 Code ready, deployment pending authentication
+- **API Endpoints**: Prepared for DNS queries, Certificate Transparency, etc.
+- **Fallback Mode**: ✅ Direct API calls working in current deployment
 
 ## ✨ Features
 
@@ -51,7 +69,18 @@
 
 ## 🌐 Deployment Options
 
-### Cloudflare Pages + Workers (Recommended)
+### GitHub Pages (Currently Active)
+
+The application is currently deployed on GitHub Pages with direct API calls:
+
+**🔗 Live Application: [https://kedster.github.io/3ptracer/](https://kedster.github.io/3ptracer/)**
+
+```bash
+# Deploy to GitHub Pages
+./deploy.sh  # Builds to docs/ folder for GitHub Pages
+```
+
+### Cloudflare Pages + Workers (Available)
 
 Deploy with advanced features including API proxy, caching, and CORS handling:
 
@@ -68,13 +97,7 @@ wrangler login
 
 See [CLOUDFLARE-DEPLOYMENT.md](CLOUDFLARE-DEPLOYMENT.md) for detailed instructions.
 
-### GitHub Pages (Legacy)
-
-Deploy static version with direct API calls:
-
-```bash
-./deploy.sh  # Builds to docs/ folder for GitHub Pages
-```
+> **Note**: The Cloudflare deployment requires authentication and setup. The repository includes all necessary files for Cloudflare deployment but is currently deployed on GitHub Pages.
 
 ## 📋 How It Works
 
@@ -110,7 +133,7 @@ Comprehensive security analysis including:
 ### **Quick Start**
 1. Clone the repository:
    ```bash
-   git clone https://github.com/cyfinoid/3ptracer.git
+   git clone https://github.com/kedster/3ptracer.git
    cd 3ptracer
    ```
 
@@ -224,10 +247,8 @@ This project is licensed under the MIT License - see the [LICENSE](LICENSE) file
 ## 📞 Support
 
 For questions, issues, or feature requests:
-- **GitHub Issues**: [Create an issue](https://github.com/cyfinoid/3ptracer/issues)
-- **Live Demo**: [https://cyfinoid.github.io/3ptracer/](https://cyfinoid.github.io/3ptracer/)
+- **GitHub Issues**: [Create an issue](https://github.com/kedster/3ptracer/issues)
+- **Live Demo**: [https://kedster.github.io/3ptracer/](https://kedster.github.io/3ptracer/)
 
----
-
-**🔬 Built with ❤️ by [Cyfinoid Research](https://cyfinoid.com/) - Advancing Cloud Security Research** 
+--- 
 
