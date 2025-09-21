@@ -1,3 +1,5 @@
 .DS_Store
 old-code
 logs
+node_modules/
+dist/

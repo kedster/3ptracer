@@ -43,10 +43,38 @@
 ## 🚀 Technology Stack
 
 - **Frontend**: Pure HTML5, CSS3, Vanilla JavaScript
+- **API Proxy**: Cloudflare Workers (with fallback to direct calls)
 - **DNS**: DNS over HTTPS (DoH) with multiple providers
 - **APIs**: Certificate Transparency, Threat Intelligence, ASN Lookup
-- **Architecture**: Client-side only, no server dependencies
-- **Deployment**: GitHub Pages ready
+- **Architecture**: Client-side with optional Worker backend
+- **Deployment**: Cloudflare Pages + Workers (recommended) or GitHub Pages
+
+## 🌐 Deployment Options
+
+### Cloudflare Pages + Workers (Recommended)
+
+Deploy with advanced features including API proxy, caching, and CORS handling:
+
+```bash
+# Install Wrangler CLI
+npm install -g wrangler
+
+# Authenticate with Cloudflare
+wrangler login
+
+# Deploy (automated script)
+./deploy-cloudflare.sh
+```
+
+See [CLOUDFLARE-DEPLOYMENT.md](CLOUDFLARE-DEPLOYMENT.md) for detailed instructions.
+
+### GitHub Pages (Legacy)
+
+Deploy static version with direct API calls:
+
+```bash
+./deploy.sh  # Builds to docs/ folder for GitHub Pages
+```
 
 ## 📋 How It Works
 

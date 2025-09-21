@@ -747,6 +747,22 @@ class DNSAnalyzer {
     // Query specific DNS server
     async queryDNSServer(domain, type, server) {
         try {
+            // Use new API client if available
+            if (window.APIClient) {
+                // Map server URLs to provider names
+                let provider = 'cloudflare';
+                if (server.includes('dns.google')) {
+                    provider = 'google';
+                } else if (server.includes('quad9')) {
+                    provider = 'quad9';
+                } else if (server.includes('cloudflare')) {
+                    provider = 'cloudflare';
+                }
+                
+                return await window.APIClient.queryDNS(domain, type, provider);
+            }
+            
+            // Fallback to direct DNS queries
             if (server.includes('dns.google')) {
                 // Google DNS format
                 const url = new URL(server);
@@ -1019,36 +1035,52 @@ class DNSAnalyzer {
         this.stats.apiCalls++;
         
         try {
-            // Try with different CORS modes
-            let response = null;
-            try {
-                // First try with explicit CORS mode
-                response = await fetch(`https://crt.sh/?q=%25.${domain}&output=json`, {
-                    method: 'GET',
-                    mode: 'cors',
-                    headers: {
-                        'Accept': 'application/json'
-                    }
-                });
-            } catch (corsError) {
-                console.log(`    ⚠️  CORS error with crt.sh, trying without mode:`, corsError.message);
-                // Try without explicit mode
-                response = await fetch(`https://crt.sh/?q=%25.${domain}&output=json`, {
-                    method: 'GET',
-                    headers: {
-                        'Accept': 'application/json'
-                    }
-                });
+            let data;
+            
+            // Use API client if available
+            if (window.APIClient) {
+                try {
+                    data = await window.APIClient.queryCT(domain, 'crtsh');
+                    console.log(`    📊 crt.sh via Worker returned ${data?.length || 0} entries`);
+                } catch (workerError) {
+                    console.log(`    ⚠️  Worker query failed, falling back to direct:`, workerError.message);
+                    // Continue to fallback
+                }
             }
             
-            if (!response.ok) {
-                const errorMsg = `Service unavailable (${response.status})`;
-                this.notifyAPIStatus('crt.sh', 'error', errorMsg);
-                throw new Error(`CT query failed: ${response.status}`);
+            // Fallback to direct query if worker failed or not available
+            if (!data) {
+                // Try with different CORS modes
+                let response = null;
+                try {
+                    // First try with explicit CORS mode
+                    response = await fetch(`https://crt.sh/?q=%25.${domain}&output=json`, {
+                        method: 'GET',
+                        mode: 'cors',
+                        headers: {
+                            'Accept': 'application/json'
+                        }
+                    });
+                } catch (corsError) {
+                    console.log(`    ⚠️  CORS error with crt.sh, trying without mode:`, corsError.message);
+                    // Try without explicit mode
+                    response = await fetch(`https://crt.sh/?q=%25.${domain}&output=json`, {
+                        method: 'GET',
+                        headers: {
+                            'Accept': 'application/json'
+                        }
+                    });
+                }
+                
+                if (!response.ok) {
+                    const errorMsg = `Service unavailable (${response.status})`;
+                    this.notifyAPIStatus('crt.sh', 'error', errorMsg);
+                    throw new Error(`crt.sh query failed: ${response.status}`);
+                }
+                
+                data = await response.json();
+                console.log(`    📊 crt.sh returned ${data.length} entries`);
             }
-            
-            const data = await response.json();
-            console.log(`    📊 crt.sh returned ${data.length} entries`);
             
             // Process entries and add to discovery queue
             let processedCount = 0;
@@ -1089,21 +1121,36 @@ class DNSAnalyzer {
         this.stats.apiCalls++;
         
         try {
-            const response = await fetch(`https://certspotter.com/api/v0/certs?domain=${domain}`, {
-                method: 'GET',
-                headers: {
-                    'Accept': 'application/json'
-                }
-            });
+            let data;
             
-            if (!response.ok) {
-                const errorMsg = `Service unavailable (${response.status})`;
-                this.notifyAPIStatus('Cert Spotter', 'error', errorMsg);
-                throw new Error(`Cert Spotter query failed: ${response.status}`);
+            // Use API client if available
+            if (window.APIClient) {
+                try {
+                    data = await window.APIClient.queryCT(domain, 'certspotter');
+                    console.log(`    📊 Cert Spotter via Worker returned ${data?.length || 0} certificates`);
+                } catch (workerError) {
+                    console.log(`    ⚠️  Worker query failed, falling back to direct:`, workerError.message);
+                }
             }
             
-            const data = await response.json();
-            console.log(`    📊 Cert Spotter returned ${data.length} certificates`);
+            // Fallback to direct query if worker failed or not available
+            if (!data) {
+                const response = await fetch(`https://certspotter.com/api/v0/certs?domain=${domain}`, {
+                    method: 'GET',
+                    headers: {
+                        'Accept': 'application/json'
+                    }
+                });
+                
+                if (!response.ok) {
+                    const errorMsg = `Service unavailable (${response.status})`;
+                    this.notifyAPIStatus('Cert Spotter', 'error', errorMsg);
+                    throw new Error(`Cert Spotter query failed: ${response.status}`);
+                }
+                
+                data = await response.json();
+                console.log(`    📊 Cert Spotter returned ${data.length} certificates`);
+            }
             
             // Process entries and add to discovery queue
             let processedCount = 0;
@@ -1142,21 +1189,36 @@ class DNSAnalyzer {
         this.stats.apiCalls++;
         
         try {
-            const response = await fetch(`https://otx.alienvault.com/api/v1/indicators/domain/${domain}/passive_dns`, {
-                method: 'GET',
-                headers: {
-                    'Accept': 'application/json'
-                }
-            });
+            let data;
             
-            if (!response.ok) {
-                const errorMsg = `Service unavailable (${response.status})`;
-                this.notifyAPIStatus('OTX AlienVault', 'error', errorMsg);
-                throw new Error(`OTX query failed: ${response.status}`);
+            // Use API client if available
+            if (window.APIClient) {
+                try {
+                    data = await window.APIClient.queryCT(domain, 'otx');
+                    console.log(`    📊 OTX via Worker returned ${data?.passive_dns?.length || 0} entries`);
+                } catch (workerError) {
+                    console.log(`    ⚠️  Worker query failed, falling back to direct:`, workerError.message);
+                }
             }
             
-            const data = await response.json();
-            console.log(`    📊 OTX returned ${data.passive_dns?.length || 0} entries`);
+            // Fallback to direct query if worker failed or not available
+            if (!data) {
+                const response = await fetch(`https://otx.alienvault.com/api/v1/indicators/domain/${domain}/passive_dns`, {
+                    method: 'GET',
+                    headers: {
+                        'Accept': 'application/json'
+                    }
+                });
+                
+                if (!response.ok) {
+                    const errorMsg = `Service unavailable (${response.status})`;
+                    this.notifyAPIStatus('OTX AlienVault', 'error', errorMsg);
+                    throw new Error(`OTX query failed: ${response.status}`);
+                }
+                
+                data = await response.json();
+                console.log(`    📊 OTX returned ${data.passive_dns?.length || 0} entries`);
+            }
             
             // Process entries and add to discovery queue
             let processedCount = 0;
@@ -1192,20 +1254,36 @@ class DNSAnalyzer {
         this.stats.apiCalls++;
         
         try {
-            const response = await fetch(`https://api.hackertarget.com/hostsearch/?q=${domain}`, {
-                method: 'GET',
-                headers: {
-                    'Accept': 'text/plain'
-                }
-            });
+            let data;
             
-            if (!response.ok) {
-                const errorMsg = `Service unavailable (${response.status})`;
-                this.notifyAPIStatus('HackerTarget', 'error', errorMsg);
-                throw new Error(`HackerTarget query failed: ${response.status}`);
+            // Use API client if available
+            if (window.APIClient) {
+                try {
+                    data = await window.APIClient.queryCT(domain, 'hackertarget');
+                    console.log(`    📊 HackerTarget via Worker returned ${data?.split('\n')?.length || 0} entries`);
+                } catch (workerError) {
+                    console.log(`    ⚠️  Worker query failed, falling back to direct:`, workerError.message);
+                }
             }
             
-            const data = await response.text();
+            // Fallback to direct query if worker failed or not available
+            if (!data) {
+                const response = await fetch(`https://api.hackertarget.com/hostsearch/?q=${domain}`, {
+                    method: 'GET',
+                    headers: {
+                        'Accept': 'text/plain'
+                    }
+                });
+                
+                if (!response.ok) {
+                    const errorMsg = `Service unavailable (${response.status})`;
+                    this.notifyAPIStatus('HackerTarget', 'error', errorMsg);
+                    throw new Error(`HackerTarget query failed: ${response.status}`);
+                }
+                
+                data = await response.text();
+            }
+            
             console.log(`    📊 HackerTarget returned ${data.split('\n').length} entries`);
             
             // Process entries and add to discovery queue
